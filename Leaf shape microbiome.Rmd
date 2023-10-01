@@ -1,0 +1,838 @@
+---
+title: "Leaf shape microbiome"
+author: "Julia Boyle"
+date: "2023-07-31"
+output: html_document
+---
+#Packages
+```{r}
+library(pander)
+library(ape)
+library(microbiomeSeq)
+library(ranacapa)
+library(adespatial)
+library(plotly)
+library(philr)
+library(MicrobeR)
+library(microbiome)
+library(microbiomeutilities)
+library(qiime2R)
+library(phyloseq)
+library(ANCOMBC)
+library(plyr)
+library(tidyverse)
+library(car)
+library(vegan)
+library(RColorBrewer) 
+library(randomcoloR)
+library(cowplot)
+library(lmerTest)
+library(insight)
+library(lme4)
+library(compositions)
+library(zCompositions)
+library(phyloseqCompanion)
+library(CoDaSeq)
+library(microshades)#color blind friendly shades
+library(speedyseq)
+library(patchwork)
+library(viridis)
+library(picante)
+```
+
+# Reading in data
+```{r}
+#Reading in metadata as it's own file
+micrometa<- read.csv('ipomoea-taxa-metadata-allnumbers.csv',header = TRUE) #full metadata
+micrometa$Shape<-factor(micrometa$Shape, levels=c("L", "M", "H"))
+metadata<-read.table('ipomoea_metadata.tsv', header=TRUE, row.names = 1) #this only has plants that survived, so not all numbers between 1-240
+metadata$Shape<-factor(metadata$Shape, levels=c("L", "M", "H"))
+metadata$Line<-as.factor(metadata$Line)
+metadata$Germination_cohort<-as.factor(metadata$Germination_cohort)
+str(metadata)
+metadata
+featuretable<- read.csv('table-try3-10readsmin-filtered-cyano-mito.csv',row.names = 1, check.names = FALSE, header = TRUE) #this is the feature table as a .csv file
+taxonomy<- read.csv('taxonomy_try3.csv') #the taxonomy file as a .csv file
+
+
+phyglory <- qza_to_phyloseq("table-try3-10readsmin-filtered-cyano-mito-glory.qza", "rooted-tree-try3-glory.qza", "taxonomy-try3-glory.qza","ipomoea_metadata.tsv") 
+
+sample_data(phyglory)$FloweringDOY<-as.factor(sample_data(phyglory)$FloweringDOY) 
+sample_data(phyglory)$Days_to_flowering_factor<-as.factor(sample_data(phyglory)$Days_to_flowering)
+sample_data(phyglory)$Line<-as.factor(sample_data(phyglory)$Line) 
+sample_data(phyglory)$Shape<-factor(sample_data(phyglory)$Shape, levels=c("L", "M", "H"))
+sample_data(phyglory)['sample_id'] <- row.names(sample_data(phyglory)) 
+str(phyglory)
+sample_data(phyglory)
+
+# check for features of data  
+summarize_phyloseq(phyglory)
+print_ps(phyglory)
+summary(sample_sums(phyglory))
+ntaxa(phyglory)
+nsamples(phyglory)
+sample_names(phyglory)[1:5]  
+rank_names(phyglory)  
+sample_variables(phyglory)  
+otu_table(phyglory)[1:5, 1:5]  
+tax_table(phyglory)[1:10, 1:4]
+
+#Checking taxa prevalence at phylum level
+plot_taxa_prevalence(phyglory, "Phylum")
+```
+
+# Rarefaction of data
+Does the order matter of prevalence aggregation and rarefying step? Which one is more correct?
+```{r}
+# set seed
+set.seed(1)
+subsamples <- seq(0, 23100, by=100)[-1]
+phygloryrarefactioncurve <- plot_alpha_rcurve(phyglory, index="observed", 
+                       subsamples = subsamples,
+                       lower.conf = 0.5, 
+                       upper.conf = 0.5,
+                       group="Shape",
+                       label.color = "brown3",
+                       label.size = 3,
+                       label.min = TRUE) 
+print(phygloryrarefactioncurve)
+```
+
+```{r}
+phyglory_rarefy <- rarefy_even_depth(phyglory, rngseed=1, sample.size=0.4*median(sample_sums(phyglory)), replace=F) # approx 1809 reads
+summarize_phyloseq(phyglory_rarefy)
+ntaxa(phyglory_rarefy)
+```
+
+#Centered log ratio transformation 
+```{r}
+#ASV feature table
+featuretableCLR<-clr(featuretable+1) #add 1 to avoid taking log of 0, use compositions package
+featuretableCLR<-as.data.frame(featuretableCLR)
+featuretableCLR
+
+#aggregated by Genus
+phyglory_gen <- microbiome::aggregate_rare(phyglory, level = "Genus", detection = 0/100, prevalence = 30/100)#must be 0% relative abundance, and appear in at least 30% of samples
+featuretableCLR_gen<-as.data.frame(otu_table(phyglory_gen))
+write.csv(featuretableCLR_gen, "phygloryCLRGenfeaturetable.csv")#transposed manually in excel, rows for Other and Unknown genera removed
+featuretableCLRgen<-read.csv('phygloryCLRGenfeaturetable.csv',row.names = 1, check.names = FALSE, header = TRUE)
+featuretableCLRgen<-clr(featuretableCLRgen+1) #add 1 to avoid taking log of 0
+featuretableCLRgen<-as.data.frame(featuretableCLRgen)
+featuretableCLRgen
+```
+
+# Leaf shape statistics
+## Leaf area
+```{r}
+hist(micrometa$Leaf_area_cm2)
+summary(lmer(Leaf_area_cm2~Shape+Germination_cohort + (1|Line) + (1|Block), data=micrometa))
+Anova((lmer(Leaf_area_cm2~Shape+Germination_cohort + (1|Line) + (1|Block), data=micrometa)), type=3)
+
+area<-metadata%>% 
+ggplot(aes(x=Germination_cohort, y=Leaf_area_cm2, fill=Shape))+
+  geom_boxplot()+ theme_classic() + ylab('Leaf area (cm^2)')+xlab('Germination cohort') +scale_fill_manual(labels = c("Lobe", "Heterozygote", "Whole"), values = c("#00CCCC", "#9999FF", "#FF3333"))
+```
+## Circularity
+"4π×([Area]/([Perimeter]2)) with a value of 1.0 indicating a perfect circle. As the value approaches 0.0, it indicates an increasingly elongated shape."
+```{r}
+hist(micrometa$Circularity)
+Anova((lmer(Circularity~Shape+Germination_cohort + (1|Line) + (1|Block), data=micrometa)), type=3)
+
+circularity<-metadata%>% 
+ggplot(aes(x=Shape, y=Circularity, fill=Shape))+
+  geom_boxplot()+ theme_classic() + ylab('Circularity')+scale_fill_manual(labels = c("Lobe", "Heterozygote", "Whole"), values = c("#00CCCC", "#9999FF", "#FF3333")) + scale_x_discrete(limits=c("L","M","H"), labels=c("Lobe", "Heterozygote", "Whole"))+theme(legend.position = "none")
+
+```
+
+# Composition plots
+Family level
+```{r}
+#making relative abundances objects for different taxonomic levels
+phyglory_fam <- microbiome::aggregate_rare(phyglory, level = "Family", detection = 10/100, prevalence = 30/100)
+phyglory.fam.rel <- microbiome::transform(phyglory_fam, "compositional")
+phyglory.fam.rel <- phyglory %>%
+  aggregate_rare(level = "Family", detection = 10/100, prevalence = 30/100) %>%
+  microbiome::transform(transform = "compositional")
+
+phyglory.fam.rel.germ1<-subset_samples(phyglory.fam.rel, Germination_cohort%in%c("First"))
+phyglory.fam.rel.germ2<-subset_samples(phyglory.fam.rel, Germination_cohort%in%c("Second"))
+
+#palettegood <- distinctColorPalette(50)
+
+leaf_germ1<-plot_composition(phyglory.fam.rel.germ1, sample.sort = "Sphingomonadaceae", x.label = "Shape") + theme_cowplot()+ theme(legend.position = "none") +scale_fill_manual(values =palettegood) + theme(axis.text.x = element_blank(), axis.text.y=element_text(size=10)) + ggtitle("First germination cohort") + theme(legend.title = element_text(size = 5), axis.text = element_text(size=10) )+xlab("Samples")
+leaf_germ1
+
+leaf_germ2<-plot_composition(phyglory.fam.rel.germ2, sample.sort = "Sphingomonadaceae", x.label = "Shape") + theme_cowplot() +scale_fill_manual(values =palettegood) + theme(axis.text.x = element_blank(), axis.text.y=element_text(size=10)) + ggtitle("Second germination cohort") + theme(legend.title = element_text(size = 15), axis.text = element_text(size=10) )+xlab("Samples")+ guides(fill=guide_legend(title="Bacterial Family"))
+leaf_germ2
+```
+
+Get relative abundance of different families per sample for downstream purposes
+```{r}
+genera_relabund<-phyglory_rarefy %>% tax_glom(taxrank = "Genus") %>% 
+        transform_sample_counts(function(x) {x/sum(x)}) %>% psmelt() %>% 
+        dplyr::select(Genus, Sample, Abundance) %>% spread(Sample, Abundance)
+tgenera_relabund = setNames(data.frame(t(genera_relabund[,-1])), genera_relabund[,1])
+tgenera_relabund
+
+rarefiedmeta<-as.data.frame(sample_data(phyglory_rarefy))
+vector<-rarefiedmeta$sample_id #get order of phyloseq metadata samples
+
+tgenera_relabund_sorted<-tgenera_relabund %>%
+  slice(match(vector, rownames(tgenera_relabund))) #reorder the dataframe to be the same order as the phyloseq metadata
+
+tgenera_relabund_sorted$Methylobacterium
+
+sample_data(phyglory_rarefy)$Methylobacterium_relabundance<-tgenera_relabund_sorted$Methylobacterium
+sample_data(phyglory_rarefy)$Sphingomonas_relabundance<-tgenera_relabund_sorted$Sphingomonas
+sample_data(phyglory_rarefy)$Agrobacterium_relabundance<-tgenera_relabund_sorted$Agrobacterium
+sample_data(phyglory_rarefy)$Deinococcus_relabundance<-tgenera_relabund_sorted$Deinococcus
+sample_data(phyglory_rarefy)$Pseudomonas_relabundance<-tgenera_relabund_sorted$Pseudomonas
+sample_data(phyglory_rarefy)$Arthrobacter_relabundance<-tgenera_relabund_sorted$Arthrobacter
+```
+
+# Core microbiome
+```{r}
+phyglory_core <- microbiome::aggregate_rare(phyglory_rarefy, level = "Genus", detection = 0/100, prevalence = 80/100)
+core_members(phyglory_core)
+```
+
+
+# Alpha diversities
+plot
+```{r}
+gloryrich<-estimate_richness(phyglory_rarefy)
+gloryrich<-cbind(gloryrich, sample_data(phyglory_rarefy))
+a.divglory<-gloryrich %>% 
+  ggplot(aes(x=Germination_cohort, y=Observed, fill=Germination_cohort))+geom_boxplot()+theme_cowplot() +theme(axis.text.x = element_text(size=13), legend.position="none") +xlab("Germination Cohort") + scale_fill_manual("Germination_cohort", values=c("#FF9900", "#99CC33"))+ ylab("Observed richness")
+a.divglory
+```
+statistical test
+```{r}
+gloryrichness<-estimate_richness(phyglory_rarefy)
+gloryrichness
+hist(gloryrichness$Shannon)
+hist(gloryrichness$Observed)
+
+#shannon
+Anova((lmer(Shannon~sample_data(phyglory_rarefy)$Shape+sample_data(phyglory_rarefy)$Germination_cohort + (1|sample_data(phyglory_rarefy)$Line) + (1|sample_data(phyglory_rarefy)$Block), data=gloryrichness)), type=3)
+
+#Observed
+Anova((lmer(log(Observed)~sample_data(phyglory_rarefy)$Shape+sample_data(phyglory_rarefy)$Germination_cohort + (1|sample_data(phyglory_rarefy)$Line) + (1|sample_data(phyglory_rarefy)$Block), data=gloryrichness)), type=3)
+```
+
+# Beta diversity
+## PCoA
+Leaf shape and germination cohort
+```{r}
+phyglory_rel_rare <- microbiome::transform(phyglory_rarefy, "compositional")
+phyglory.ord.wuni_rare <- ordinate(phyglory_rel_rare, "PCoA", "unifrac", weighted=T)
+
+b.div.wuniglory_rare <- plot_ordination(phyglory_rel_rare, phyglory.ord.wuni_rare, type= "samples", color= "Shape") + geom_point(size=3) + theme_cowplot() +ggtitle("")+ scale_color_manual("Leaf shape genotype",labels = c("Lobe", "Heterozygote", "Whole"), values = c("#00CCCC", "#9999FF", "#FF3333"))+ stat_ellipse()+xlab("Axis 1 [53.2%]")+ylab("Axis 2 [23.2%]")
+print(b.div.wuniglory_rare)
+
+b.div.wuniglory_rareG <- plot_ordination(phyglory_rel_rare, phyglory.ord.wuni_rare, type= "samples", color= "Germination_cohort") + geom_point(size=3) +ggtitle("")  + scale_color_manual("Germination cohort",values=c("#FF9900", "#99CC33")) +theme_cowplot() + stat_ellipse()+xlab("Axis 1 [53.2%]")+ylab("Axis 2 [23.2%]")
+print(b.div.wuniglory_rareG)
+
+b.div.wuniglory_rareF <- plot_ordination(phyglory_rel_rare, phyglory.ord.wuni_rare, type= "samples", color= "Flowered_by_collection") + geom_point(size=3)+ggtitle("") + scale_color_manual("Flowered by collection",values=c("#FF9900", "#99CC33")) +theme_cowplot() + stat_ellipse()+xlab("Axis 1 [53.2%]")+ylab("Axis 2 [23.2%]")
+print(b.div.wuniglory_rareF)
+```
+
+Core taxa driving the variation
+```{r}
+b.div.wuniglory_methylo <- plot_ordination(phyglory_rel_rare, phyglory.ord.wuni_rare, type= "samples", color= "Methylobacterium_relabundance") + geom_point(size=3) + ggtitle("Methylobacterium") +theme_cowplot()+xlab("Axis 1 [53.2%]")+ylab("Axis 2 [23.2%]")+scale_color_viridis(name="Relative abundance",discrete=FALSE, option="viridis")
+print(b.div.wuniglory_methylo) #maybe driving PC1
+
+b.div.wuniglory_sphingo <- plot_ordination(phyglory_rel_rare, phyglory.ord.wuni_rare, type= "samples", color= "Sphingomonas_relabundance") + geom_point(size=3) + ggtitle("Sphingomonas") +theme_cowplot()+xlab("Axis 1 [53.2%]")+ylab("Axis 2 [23.2%]")+scale_color_viridis(name="Relative abundance",discrete=FALSE, option="viridis")
+print(b.div.wuniglory_sphingo) #maybe driving PC2
+
+b.div.wuniglory_dein <- plot_ordination(phyglory_rel_rare, phyglory.ord.wuni_rare, type= "samples", color= "Deinococcus_relabundance") + geom_point(size=3) + ggtitle("Deinococcus") +theme_cowplot()+scale_color_viridis(name="Relative abundance",discrete=FALSE, option="viridis")+xlab("Axis 1 [53.2%]")+ylab("Axis 2 [23.2%]")
+print(b.div.wuniglory_dein) #the couple dots out of place in methylobacterium plot
+
+b.div.wuniglory_art <- plot_ordination(phyglory_rel_rare, phyglory.ord.wuni_rare, type= "samples", color= "Arthrobacter_relabundance") + geom_point(size=3) + ggtitle("Arthrobacter") +theme_cowplot()+scale_color_viridis(name="Relative abundance",discrete=FALSE, option="viridis")+xlab("Axis 1 [53.2%]")+ylab("Axis 2 [23.2%]")
+print(b.div.wuniglory_art) #explains upper left corner
+```
+
+
+## Permanova 
+rarefied
+```{r}
+phyglory_rel_rare <- microbiome::transform(phyglory_rarefy, "compositional")
+otuglory_rare <- abundances(phyglory_rel_rare)
+metaglory_rare <- meta(phyglory_rel_rare)
+#Statistics - Bdiv
+adonis2(t(otuglory_rare) ~ Shape+Germination_cohort, data = metaglory_rare, permutations=999, method = "bray")
+```
+
+# ANCOM-BC
+```{r}
+#Don't aggregate by anything if you want results by ASV
+Genus_glory = aggregate_taxa(phyglory, "Genus")
+phyglory_ancom = ancombc(phyloseq = Genus_glory, formula = "Germination_cohort + Shape", 
+              p_adj_method = "holm", zero_cut = 0.95, lib_cut = 1000, group= "Shape", 
+          struc_zero = TRUE, neg_lb = TRUE, tol = 1e-5, 
+              max_iter = 100, conserve = TRUE, alpha = 0.05, global = TRUE) #global=True if your factors have >3 levels
+
+resglory= phyglory_ancom$res
+resglory_global = phyglory_ancom$res_global #this is for when your factors have more than 3 levels
+
+resglory
+tab_coef_glory = resglory$beta #Coefficients from primary result
+colnames(tab_coef_glory) = c("Coef_Germination_cohort", "Coef_ShapeL", "Coef_ShapeM")
+tab_se_glory = resglory$se #SEs from the Primary Result
+colnames(tab_se_glory) = c("SE_Germination_cohort", "SE_ShapeL", "SE_ShapeM")
+tab_w_glory = resglory$W #Test Statistics from the Primary Result
+colnames(tab_w_glory) = c("TestStats_Germination_cohort", "TestStats_ShapeL", "TestStats_ShapeM")
+tab_p_glory = resglory$p_val #P-values from the Primary Result
+colnames(tab_p_glory) = c("p_Germination_cohort", "p_ShapeL", "p_ShapeM")
+tab_q_glory = resglory$q #Adjusted p-values from the Primary Result
+colnames(tab_q_glory) = c("padjs_Germination_cohort", "padjs_ShapeL", "padjs_ShapeM")
+tab_diff_glory = resglory$diff_abn #Differentially Abundant Taxa from the Primary Result
+colnames(tab_diff_glory) = c("Differential_expr_Germination_cohort", "Differential_expr_ShapeL", "Differential_expr_ShapeM")
+
+ANCOMglory<-cbind(tab_coef_glory, tab_se_glory, tab_w_glory, tab_p_glory, tab_q_glory, tab_diff_glory)
+ANCOMglory
+
+ANCOMglory<-setNames(cbind(rownames(ANCOMglory), ANCOMglory, row.names = NULL), 
+         c("Taxa", "Coef_Germination_cohort", "Coef_ShapeL", "Coef_ShapeM", "SE_Germination_cohort", "SE_ShapeL", "SE_ShapeM", "TestStats_Germination_cohort", "TestStats_ShapeL", "TestStats_ShapeM", "p_Germination_cohort", "p_ShapeL", "p_ShapeM", "padjs_Germination_cohort", "padjs_ShapeL", "padjs_ShapeM", "Differential_expr_Germination_cohort", "Differential_expr_ShapeL", "Differential_expr_ShapeM"))
+ANCOMglory
+
+#write.csv(ANCOMglory,"ancomglory.csv")
+
+ANCOMglory %>% 
+  filter(Differential_expr_Germination_cohort=="TRUE")
+ANCOMglory %>% 
+  filter(Differential_expr_ShapeL=="TRUE")
+ANCOMglory %>% 
+  filter(`Differential_expr_ShapeM`=="TRUE")
+
+unique(tax_table(subset_taxa(phyglory, Genus=="Methylobacterium"))) #to see species within the genera
+
+ANCOMglory %>% 
+  filter(Differential_expr_Germination_cohort=="TRUE") %>% 
+  ggplot(aes(x=Taxa, y=Coef_Germination_cohort))+
+  geom_point(size=4)+geom_hline(yintercept=0)+theme_bw() +theme(axis.text.x = element_text(size=10,angle = 45, vjust = 1, hjust=1))+theme(axis.text.y= element_text(size=5)) + ylab('Log fold change Effect of Germination Cohort') +xlab('Genus')
+
+ancomglory_shape<-read.csv('ancomglory_shape.csv')
+head(ancomglory_shape)
+ancomglory_shape_plot<-ancomglory_shape %>% 
+  ggplot(aes(x=Taxa, y=Coefficient, colour=Shape))+
+  geom_point(size=4) +geom_hline(yintercept=0) +theme_bw() +theme(axis.text.x = element_text(size=10,angle = 45, vjust = 1, hjust=1))+ ylab('Effect of leaf shape genotype (Log-fold change)') +xlab('Genus') +scale_colour_manual("Leaf shape genotype", values=c("#9999FF", "#00CCCC")) +scale_x_discrete(limits=c("Rhodoplanes", "Gemmata", "Alicyclobacillus", "Paenibacillus", "Amaricoccus", "Streptomyces", "Agromyces", "Actinomycetospora", "Rhodocytophaga", "Variovorax"))
+ancomglory_shape_plot
+
+ggsave2("ancomglory_shape_plot.png", ancomglory_shape_plot, dpi=600, width=7, height=5)
+```
+
+
+# Estimating heritability
+## Community wide metrics
+```{r}
+#getting species richness and ordination first 3 axes into one metadata file
+metadataphyR<-as.data.frame(sample_data(phyglory_rarefy))
+gloryrichness_rarefied<-estimate_richness(phyglory_rarefy) #generating observed and shannon 
+metadataphyR$ObservedRich<-gloryrichness_rarefied$Observed
+metadataphyR$Shannon<-gloryrichness_rarefied$Shannon
+
+phyglory_rare_rel <- microbiome::transform(phyglory_rarefy, "compositional")
+phyglory.ord.wuniR <- ordinate(phyglory_rare_rel, "PCoA", "unifrac", weighted=T) #this is how the pcoa was generated, the same one as in the main text
+str(phyglory.ord.wuniR)
+phyglory.ord.wuniR$values
+phyglory.ord.wuniR$vectors #numbers from first 3 pcoa axes- CHECK THIS IS WHAT I WANT
+metadataphyR$PCoA_axis1<-phyglory.ord.wuniR$vectors[,1]
+metadataphyR$PCoA_axis2<-phyglory.ord.wuniR$vectors[,2]
+metadataphyR$PCoA_axis3<-phyglory.ord.wuniR$vectors[,3]
+metadataRH2<-as.data.frame(as(metadataphyR, "matrix")) #save phyloseq object as dataframe
+
+str(metadataRH2)
+metadataRH2$ObservedRich<-as.integer(metadataRH2$ObservedRich) #fix some of the salient categorization problems
+metadataRH2$Shannon<-as.numeric(metadataRH2$Shannon)
+metadataRH2$PCoA_axis1<-as.numeric(metadataRH2$PCoA_axis1)
+metadataRH2$PCoA_axis2<-as.numeric(metadataRH2$PCoA_axis2)
+metadataRH2$PCoA_axis3<-as.numeric(metadataRH2$PCoA_axis3)
+metadataRH2$Germination_cohort<-as.factor(metadataRH2$Germination_cohort)
+metadataRH2$Shape<-as.factor(metadataRH2$Shape)
+metadataRH2$Line<-as.factor(metadataRH2$Line)
+metadataRH2$Block<-as.factor(metadataRH2$Block)
+
+hist(metadataRH2$ObservedRich)#check normality of data
+hist(log(metadataRH2$ObservedRich)) 
+hist(metadataRH2$Shannon)
+hist(metadataRH2$PCoA_axis1)
+hist(metadataRH2$PCoA_axis2)
+hist(metadataRH2$PCoA_axis3)
+```
+Running the models
+```{r}
+#for our H2 estimates:
+set.seed(0)
+RH2_ObservedRich<-lmer(log(ObservedRich)~ Germination_cohort + Shape + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
+RH2_Shannon<-lmer(Shannon~ Germination_cohort + Shape + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
+RH2_PCoA1<-lmer(PCoA_axis1~ Germination_cohort + Shape + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
+RH2_PCoA2<-lmer(PCoA_axis2~ Germination_cohort + Shape + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
+RH2_PCoA3<-lmer(PCoA_axis3~ Germination_cohort + Shape + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
+
+summary(RH2_ObservedRich) #sig germ
+summary(RH2_Shannon)
+summary(RH2_PCoA1) #sig germ
+summary(RH2_PCoA2)#sig germ
+summary(RH2_PCoA3) #sig M difference from H
+
+Anova(lmer(log(ObservedRich)~ Germination_cohort + Shape + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead")), type=3)
+Anova(lmer(Shannon~ Germination_cohort + Shape + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead")), type=3)
+Anova(lmer(PCoA_axis1~ Germination_cohort + Shape + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead")), type=3)
+Anova(lmer(PCoA_axis2~ Germination_cohort + Shape + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead")), type=3)
+Anova(lmer(PCoA_axis3~ Germination_cohort + Shape + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead")), type=3)
+```
+loglik with models not containing Line (higher(and less negative values) are better)
+```{r}
+set.seed(0)
+logLik(RH2_ObservedRich)#-116.773
+logLik(lmer(log(ObservedRich)~ Germination_cohort + Shape + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead")))# -116.7835
+logLik(RH2_Shannon)#-114.6886
+logLik(lmer(Shannon~ Germination_cohort + Shape + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead")))#-114.7927
+logLik(RH2_PCoA1)# 265.7301 
+logLik(lmer(PCoA_axis1~ Germination_cohort + Shape + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead")))# 265.6788
+logLik(RH2_PCoA2)# 329.5705
+logLik(lmer(PCoA_axis2~ Germination_cohort + Shape + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead")))# 329.5705
+logLik(RH2_PCoA3) #422.3402
+logLik(lmer(PCoA_axis3~ Germination_cohort + Shape + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))) #422.208
+#including line gives a better likelihood score except for Pcoa axis 2, which has same likelihood
+```
+Extract variance components and calculate heritability
+```{r}
+print(VarCorr(RH2_ObservedRich), comp=c("Variance", "Std.Dev."))#example output from VarCorr
+
+communityphenoR<-c(RH2_ObservedRich, RH2_Shannon, RH2_PCoA1, RH2_PCoA2, RH2_PCoA3)
+comphenlistR<-lapply(communityphenoR, function(x) as.data.frame(VarCorr(x))[,c("vcov", "sdcor")])
+comphenframeR<- data.frame(matrix(unlist(comphenlistR), nrow=length(comphenlistR), byrow=TRUE))
+colnames(comphenframeR)<-c("Line_variance","Block_variance", "Residual_variance","Line_stdev","Block_stdev", "Residual_stdev")
+rownames(comphenframeR)<-c("Observed_Richness", "Shannon", "PCoA1", "PCoA2", "PCoA3")
+comphenframeR<-comphenframeR %>% 
+  mutate(Total_variance= Line_variance+Block_variance+Residual_variance,
+         LinePercent=Line_variance/Total_variance,
+         BlockPercent=Block_variance/Total_variance,
+        ResidualPercent=Residual_variance/Total_variance )
+comphenframeR
+comphenPERCENTR<-gather(comphenframeR, key="Variance_component", value="Percent_variance_explained", 8:10)
+comphenPERCENTR$Model<-c("Observed_Richness", "Shannon", "PCoA1", "PCoA2", "PCoA3", "Observed_Richness", "Shannon", "PCoA1", "PCoA2", "PCoA3", "Observed_Richness", "Shannon", "PCoA1", "PCoA2", "PCoA3") 
+head(comphenframeR)
+comphenPERCENTR
+```
+figure
+```{r}
+comphenPERCENTR$Model<-factor(comphenPERCENTR$Model, levels=c( "PCoA3", "Shannon","PCoA1", "Observed_Richness", "PCoA2"))
+communityphenotypes<-comphenPERCENTR %>% 
+  filter(!Variance_component %in% c('ResidualPercent', 'GeneticPercent')) %>% 
+  ggplot(aes(x = Model, y = Percent_variance_explained, fill=Variance_component)) +
+ geom_bar(stat ="identity",width=0.5) +
+ coord_flip() +
+ labs(x = "Community phenotype", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial Block", "Plant Line"),  values = c("#FF6699", "#3399FF", "#E69F00")) +theme_cowplot() +theme(legend.position = "none")+scale_x_discrete(labels=c("PCoA axis 3","Shannon diversity","PCoA axis 1","Observed richness", "PCoA axis 2"))
+communityphenotypes
+```
+
+code for figure comparing magnitude of line vs shape
+```{r}
+#for figure purposes, comparing the magnitude of effect of line vs leaf shape:
+set.seed(0)
+fig_ObservedRich<-lmer(log(ObservedRich)~ Germination_cohort + (1|Shape) + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
+fig_Shannon<-lmer(Shannon~ Germination_cohort + (1|Shape) + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
+fig_PCoA1<-lmer(PCoA_axis1~ Germination_cohort + (1|Shape) + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
+fig_PCoA2<-lmer(PCoA_axis2~ Germination_cohort + (1|Shape) + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
+fig_PCoA3<-lmer(PCoA_axis3~ Germination_cohort + (1|Shape) + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
+
+summary(fig_ObservedRich)
+summary(fig_Shannon)
+summary(fig_PCoA1) #
+summary(fig_PCoA2)
+summary(fig_PCoA3)
+
+communityphenofig<-c(fig_ObservedRich, fig_Shannon, fig_PCoA1, fig_PCoA2, fig_PCoA3)
+comphenlistfig<-lapply(communityphenofig, function(x) as.data.frame(VarCorr(x))[,c("vcov", "sdcor")])
+comphenframefig<- data.frame(matrix(unlist(comphenlistfig), nrow=length(comphenlistfig), byrow=TRUE))
+colnames(comphenframefig)<-c("Line_variance","Block_variance","Shape_variance", "Residual_variance","Line_stdev","Block_stdev","Shape_stdev", "Residual_stdev")
+rownames(comphenframefig)<-c("Observed_Richness", "Shannon", "PCoA1", "PCoA2", "PCoA3")
+comphenframefig<-comphenframefig %>% 
+  mutate(Total_variance= Line_variance+Block_variance+Shape_variance+Residual_variance,
+         LinePercent=Line_variance/Total_variance,
+         BlockPercent=Block_variance/Total_variance,
+         ShapePercent=Shape_variance/Total_variance,
+         GeneticPercent=(Line_variance+Shape_variance)/Total_variance,
+        ResidualPercent=Residual_variance/Total_variance )
+comphenframefig
+comphenPERCENTfig<-gather(comphenframefig, key="Variance_component", value="Percent_variance_explained", 10:14)
+comphenPERCENTfig$Model<-c("Observed_Richness", "Shannon", "PCoA1", "PCoA2", "PCoA3", "Observed_Richness", "Shannon", "PCoA1", "PCoA2", "PCoA3", "Observed_Richness", "Shannon", "PCoA1", "PCoA2", "PCoA3", "Observed_Richness", "Shannon", "PCoA1", "PCoA2", "PCoA3",  "Observed_Richness", "Shannon", "PCoA1", "PCoA2", "PCoA3")
+head(comphenframefig)
+```
+magnitude figure
+```{r}
+comphenPERCENTfig$Model<-factor(comphenPERCENTfig$Model, levels=c( "PCoA3", "Shannon","PCoA1", "Observed_Richness", "PCoA2"))
+comphenPERCENTfig$Variance_component <- factor(comphenPERCENTfig$Variance_component, levels = c("BlockPercent","ShapePercent", "LinePercent", "ResidualPercent", "GeneticPercent"))
+communityphenotypesfig<-comphenPERCENTfig %>% 
+  filter(!Variance_component %in% c('ResidualPercent', 'GeneticPercent')) %>% 
+  ggplot(aes(x = Model, y = Percent_variance_explained, fill=Variance_component)) +
+ geom_bar(stat ="identity",width=0.5) +
+ coord_flip() +
+ labs(x = "Community phenotype", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial block", "Leaf shape genotype","Plant line"),  values = c("#FF6699","#E69F00", "#3399FF","#99CC00")) +theme_cowplot()  +theme(legend.position = "none")+scale_x_discrete(labels=c("PCoA axis 3","Shannon diversity","PCoA axis 1","Observed richness", "PCoA axis 2"))
+communityphenotypesfig
+```
+
+permuting the data for null H2 estimates- IN PROGRESSS!!!!
+```{r}
+set.seed(42)
+# Initialize a list to store the simulated test-statistics
+simulated_H2 <- list()
+
+nreps = 1000 # 1000 iterations
+
+for(i in 1:nreps){
+metadataRH2    
+    # Create temporary dataframe to permute so we don't modify the original
+    reshuffled_CLRgen <- featuretableCLRgen 
+    
+    # Permute within rows with the 'sample()' function. 
+    reshuffled_CLRgen<-randomizeMatrix(featuretableCLRgen,null.model = "richness",iterations = 1000) #richness maintains row sums, which I think makes sense with CLR data
+    
+    # Run the models
+    RH2_ObservedRich<-lmer(log(ObservedRich)~ Germination_cohort + (1|Shape) + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
+RH2_Shannon<-lmer(Shannon~ Germination_cohort + (1|Shape) + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
+RH2_PCoA1<-lmer(PCoA_axis1~ Germination_cohort + (1|Shape) + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
+RH2_PCoA2<-lmer(PCoA_axis2~ Germination_cohort + (1|Shape) + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
+RH2_PCoA3<-lmer(PCoA_axis3~ Germination_cohort + (1|Shape) + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
+
+communityphenoR<-c(RH2_ObservedRich, RH2_Shannon, RH2_PCoA1, RH2_PCoA2, RH2_PCoA3)
+comphenlistR<-lapply(communityphenoR, function(x) as.data.frame(VarCorr(x))[,c("vcov", "sdcor")])
+comphenframeR<- data.frame(matrix(unlist(comphenlistR), nrow=length(comphenlistR), byrow=TRUE))
+colnames(comphenframeR)<-c("Line_variance","Block_variance","Shape_variance", "Residual_variance","Line_stdev","Block_stdev","Shape_stdev", "Residual_stdev")
+rownames(comphenframeR)<-c("Observed_Richness", "Shannon", "PCoA1", "PCoA2", "PCoA3")
+comphenframeR<-comphenframeR %>% 
+  mutate(Total_variance= Line_variance+Block_variance+Shape_variance+Residual_variance,
+         LinePercent=Line_variance/Total_variance,
+         BlockPercent=Block_variance/Total_variance,
+         ShapePercent=Shape_variance/Total_variance,
+         GeneticPercent=(Line_variance+Shape_variance)/Total_variance,
+        ResidualPercent=Residual_variance/Total_variance )
+comphenframeR
+    # Append simulated H2 difference to list
+
+    simulated_H2[[i]] <- print(ipomoeajuiceCLR_shuffle$GeneticPercent)
+}    
+
+# Unlist simulated means list into numeric vector
+simulated_H2 <- unlist(simulated_H2)
+head(simulated_H2)
+hist(simulated_H2)
+```
+
+## Genera CLR transformed
+```{r}
+metadataH2<-as.data.frame(sample_data(phyglory))
+write.csv(metadataH2, "metadataH2.csv")
+metadataH2<-read.csv('metadataH2.csv',row.names = 1, header = TRUE)#to get it as a dataframe, not neccessary for the model though, it can be left in phyloseq-ish format
+metadataH2$Germination_cohort<-as.factor(metadataH2$Germination_cohort)
+metadataH2$Shape<-as.factor(metadataH2$Shape)
+metadataH2$Line<-as.factor(metadataH2$Line)
+metadataH2$Block<-as.factor(metadataH2$Block)
+metadataH2 #this metadata has corresponding rows to the feature table (100, 101, 102... 10 etc.)
+
+str(metadataH2)
+metadataH2
+```
+models and figure
+```{r}
+featuretableCLRgen
+my_lmersCLR <- lapply(1:15, function(x) lmer(featuretableCLRgen[,x]~ metadataH2$Germination_cohort +metadataH2$Shape + (1|metadataH2$Line) + (1|metadataH2$Block), control = lmerControl(optimizer ="Nelder_Mead"))) 
+
+# call the summaries of the list of regressions and make a dataframe:
+summariesCLR <- lapply(my_lmersCLR, summary)
+head(summariesCLR)
+# list of only main coefficents with estimates and with p values for ipomoeajuice:
+summaries_subset_listCLR<- lapply(summariesCLR, function(x) x$coefficients[, c(1,5)])
+head(summaries_subset_listCLR)
+summaries_subset_frameCLR <- data.frame(matrix(unlist(summaries_subset_listCLR), nrow=length(summaries_subset_listCLR), byrow=TRUE))
+colnames(summaries_subset_frameCLR) <- c("Intercept_estimate","Germ_cohort_estimate","ShapeL_estimate","ShapeM_estimate","Intercept_pvalue", "Germ_cohort_pvalue", "ShapeL_pvalue", "ShapeM_pvalue")
+head(summaries_subset_frameCLR)
+
+#VarCorr to extract random effects 
+summaries_subset_var_listCLR<-lapply(my_lmersCLR, function(x) as.data.frame(VarCorr(x))[,c("vcov", "sdcor")])
+summaries_subset_var_frameCLR<- data.frame(matrix(unlist(summaries_subset_var_listCLR), nrow=length(summaries_subset_var_listCLR), byrow=TRUE))
+head(summaries_subset_var_frameCLR)
+colnames(summaries_subset_var_frameCLR)<-c("Line_variance","Block_variance","Residual_variance","Line_stdev","Block_stdev","Residual_stdev")
+head(summaries_subset_var_frameCLR)
+
+#Running type 3 anovas on the models to get F test statistics for shape
+type3_lmersCLR<-lapply(1:15, function(x) Anova((lmer(featuretableCLRgen[,x]~ metadataH2$Germination_cohort +metadataH2$Shape + (1|metadataH2$Line) + (1|metadataH2$Block), control = lmerControl(optimizer ="Nelder_Mead"))), type=3))
+type3_lmersCLR
+type3_lmers_frameCLR<-data.frame(matrix(unlist(type3_lmersCLR), nrow=length(type3_lmersCLR), byrow=TRUE))
+type3_lmers_frameCLR
+colnames(type3_lmers_frameCLR) <- c("Intercept_Chisq","Germ_cohort_Chisq","Shape_Chisq","Intercept_df", "Germ_cohort_df","Shape_df", "Intercept_pvalue", "Germ_cohort_pvalue", "Shape_pvalue" )
+Germ_cohort_anovap<-type3_lmers_frameCLR[,8]
+Leafshape_anovap<-type3_lmers_frameCLR[,9]
+
+summaries_outputCLR<-cbind(summaries_subset_frameCLR, summaries_subset_var_frameCLR) #combine fixed and random outputs
+summaries_output_fullCLR<-cbind(summaries_outputCLR, Germ_cohort_anovap)
+summaries_output_fullCLR<-cbind(summaries_output_fullCLR, Leafshape_anovap)
+genus<-colnames(featuretableCLRgen)
+model_number<-seq(1:500)
+summaries_output_fullCLR$Genus<-genus[1:15] #connect model outputs to the ASV it was run on
+summaries_output_fullCLR$Model_number<-model_number[1:15] #keep track of what model output we're looking at. Doubles as commonness of ASV
+summaries_output_fullCLR
+ipomoeajuiceCLR<-summaries_output_fullCLR
+
+ipomoeajuiceCLR<-ipomoeajuiceCLR %>%  
+  mutate(Total_variance= Line_variance+Block_variance+Residual_variance,
+         LinePercent=Line_variance/Total_variance,
+         BlockPercent=Block_variance/Total_variance,
+        ResidualPercent=Residual_variance/Total_variance )
+ipomoeajuiceCLR
+ipomoeaPERCENTCLR<-gather(ipomoeajuiceCLR, key="Variance_component", value="Percent_variance_explained", 19:21)
+ipomoeaPERCENTCLR<-ipomoeaPERCENTCLR %>% 
+  mutate(Line_percent=(Line_variance)/Total_variance)
+
+genera<-ipomoeaPERCENTCLR %>% 
+   filter(!Variance_component %in% c('ResidualPercent', 'Line_percent')) %>% 
+  ggplot(aes(x=reorder(Genus, -Line_percent), y=Percent_variance_explained,fill=Variance_component))+
+ geom_bar(stat ="identity",width=.75) +
+ coord_flip() +
+ labs(x = "Genus", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial block", "Plant line"),  values = c("#FF6699", "#3399FF", "#E69F00")) +theme_cowplot() 
+genera
+```
+log likelihood for H2 models
+```{r}
+my_lmers_likelihood <-lapply(1:15, function(x) logLik( lmer(featuretableCLRgen[,x]~ metadataH2$Germination_cohort +metadataH2$Shape + (1|metadataH2$Line) + (1|metadataH2$Block), control = lmerControl(optimizer ="Nelder_Mead"))) )
+
+my_lmers_likelihood_noline <- lapply(1:15, function(x) logLik( lmer(featuretableCLRgen[,x]~ metadataH2$Germination_cohort +metadataH2$Shape + (1|metadataH2$Block), control = lmerControl(optimizer ="Nelder_Mead"))) )
+
+my_lmers_likelihood_frame<-data.frame(matrix(unlist(my_lmers_likelihood), nrow=length(my_lmers_likelihood), byrow=TRUE))
+my_lmers_likelihood_noline_frame<-data.frame(matrix(unlist(my_lmers_likelihood_noline), nrow=length(my_lmers_likelihood_noline), byrow=TRUE))
+
+colnames(my_lmers_likelihood_frame) <- c("With_random_effects_logLik")
+colnames(my_lmers_likelihood_noline_frame) <- c("Noline_logLik")
+
+LogLikelihood_comparison<-cbind(my_lmers_likelihood_frame, my_lmers_likelihood_noline_frame)
+LogLikelihood_comparison$Model_number<-model_number[1:15]
+LogLikelihood_comparison$Genus<-genus[1:15]
+
+LogLikelihood_comparison<-LogLikelihood_comparison %>% mutate(Difference_noline_or_fullrandom= With_random_effects_logLik-Noline_logLik)#if 'noline' is more more negative/worse, then the value will be positive, positive value means line improved fit
+View(LogLikelihood_comparison)
+LogLikelihood_comparison %>% 
+  ggplot(aes(x=Genus, y=Difference_noline_or_fullrandom, color=ifelse(Difference_noline_or_fullrandom >0, "Improves model fit", "Same or worse model fit")))+
+  geom_point()+  scale_color_manual(name="Effect of including line", values= c("red", "black"))+ xlab('Genus') +ylab('Log likelihood difference') +theme_bw()+theme(axis.text.x = element_text(size=10, angle = 45, hjust = 1))
+#in almost all cases, including line makes little difference, but it does affect some ASVs more than others, especially the most common of the most common. Model number 1 indicates the most common ASV in the dataset. 
+LogLikelihood_comparison %>% 
+  filter(Difference_noline_or_fullrandom>0)#positive value means line improved fit
+LogLikelihood_comparison %>% 
+  filter(Difference_noline_or_fullrandom<0) #very slight worse fit
+LogLikelihood_comparison %>% 
+  filter(Difference_noline_or_fullrandom==0) # exact same fit
+```
+
+magnitude line vs leaf shape models and figure
+```{r}
+featuretableCLRgen
+my_lmersfig <- lapply(1:15, function(x) lmer(featuretableCLRgen[,x]~ metadataH2$Germination_cohort +(1|metadataH2$Shape) + (1|metadataH2$Line) + (1|metadataH2$Block), control = lmerControl(optimizer ="Nelder_Mead"))) 
+
+# call the summaries of the list of regressions and make a dataframe:
+summariesfig <- lapply(my_lmersfig, summary)
+head(summariesfig)
+# list of only main coefficents with estimates and with p values for ipomoeajuice:
+summaries_subset_listfig<- lapply(summariesfig, function(x) x$coefficients[, c(1,5)])
+head(summaries_subset_listfig)
+summaries_subset_framefig <- data.frame(matrix(unlist(summaries_subset_listfig), nrow=length(summaries_subset_listfig), byrow=TRUE))
+colnames(summaries_subset_framefig) <- c("Intercept_estimate","Germ_cohort_estimate","Intercept_pvalue", "Germ_cohort_pvalue" )
+head(summaries_subset_framefig)
+
+#VarCorr to extract random effects 
+summaries_subset_var_listfig<-lapply(my_lmersfig, function(x) as.data.frame(VarCorr(x))[,c("vcov", "sdcor")])
+summaries_subset_var_framefig<- data.frame(matrix(unlist(summaries_subset_var_listfig), nrow=length(summaries_subset_var_listfig), byrow=TRUE))
+head(summaries_subset_var_framefig)
+colnames(summaries_subset_var_framefig)<-c("Line_variance","Block_variance","Shape_variance", "Residual_variance","Line_stdev","Block_stdev","Shape_stdev", "Residual_stdev")
+head(summaries_subset_var_framefig)
+
+#Running type 3 anovas on the models to get F test statistics for shape
+type3_lmersfig<-lapply(1:15, function(x) Anova((lmer(featuretableCLRgen[,x]~ metadataH2$Germination_cohort +(1|metadataH2$Shape) + (1|metadataH2$Line) + (1|metadataH2$Block), control = lmerControl(optimizer ="Nelder_Mead"))), type=3))
+type3_lmers_framefig<-data.frame(matrix(unlist(type3_lmersfig), nrow=length(type3_lmersfig), byrow=TRUE))
+type3_lmers_framefig
+colnames(type3_lmers_framefig) <- c("Intercept_Chisq","Germ_cohort_Chisq","Intercept_df", "Germ_cohort_df", "Intercept_pvalue", "Germ_cohort_pvalue" )
+Germ_cohort_anovap<-type3_lmers_framefig[,6]
+
+summaries_outputfig<-cbind(summaries_subset_framefig, summaries_subset_var_framefig) #combine fixed and random outputs
+summaries_output_fullfig<-cbind(summaries_outputfig, Germ_cohort_anovap)
+genus<-colnames(featuretableCLRgen)
+model_number<-seq(1:500)
+summaries_output_fullfig$Genus<-genus[1:15] #connect model outputs to the ASV it was run on
+summaries_output_fullfig$Model_number<-model_number[1:15] #keep track of what model output we're looking at. Doubles as commonness of ASV
+summaries_output_fullfig
+ipomoeajuicefig<-summaries_output_fullfig
+
+ipomoeajuicefig<-ipomoeajuicefig %>%  
+  mutate(Total_variance= Line_variance+Block_variance+Shape_variance+Residual_variance,
+         LinePercent=Line_variance/Total_variance,
+         BlockPercent=Block_variance/Total_variance,
+         ShapePercent=Shape_variance/Total_variance,
+         GeneticPercent=(Line_variance+Shape_variance)/Total_variance,
+        ResidualPercent=Residual_variance/Total_variance )
+ipomoeajuicefig
+ipomoeaPERCENTfig<-gather(ipomoeajuicefig, key="Variance_component", value="Percent_variance_explained", 17:21)
+ipomoeaPERCENTfig<-ipomoeaPERCENTfig %>% 
+  mutate(Genetic_percent=(Line_variance+Shape_variance)/Total_variance)
+ipomoeaPERCENTfig<-ipomoeaPERCENTfig %>% 
+  mutate(Line_percent=(Line_variance)/Total_variance)
+ipomoeaPERCENTfig
+ipomoeaPERCENTfig$Variance_component <- factor(ipomoeaPERCENTfig$Variance_component, levels = c("BlockPercent","ShapePercent", "LinePercent", "ResidualPercent", "GeneticPercent"))
+ipomoeaPERCENTfig$Variance_component
+
+generafig<-ipomoeaPERCENTfig %>% 
+   filter(!Variance_component %in% c('ResidualPercent', 'GeneticPercent')) %>% 
+  ggplot(aes(x=reorder(Genus, -Line_percent), y=Percent_variance_explained,fill=Variance_component))+
+ geom_bar(stat ="identity",width=.75) +
+ coord_flip() +
+ labs(x = "Genus", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial block", "Leaf shape genotype","Plant line"),  values = c("#FF6699","#E69F00", "#3399FF","#99CC00")) +theme_cowplot() 
+generafig
+```
+
+permuting the data for null H2 estimates
+```{r}
+set.seed(42)
+# Initialize a list to store the simulated test-statistics
+simulated_H2 <- list()
+
+nreps = 1000 # 1000 iterations
+
+for(i in 1:nreps){
+    
+    # Create temporary dataframe to permute so we don't modify the original
+    reshuffled_CLRgen <- featuretableCLRgen 
+    reshuffled_metadataH2<-metadataH2
+   reshuffled_CLRgen<- rownames_to_column(reshuffled_CLRgen, var = "sample_ID")%>% as_tibble() #make row names a column we can interact with
+  
+    # Permute the sample IDs with the 'sample()' function. 
+  reshuffled_CLRgen$sample_ID<-sample(reshuffled_CLRgen$sample_ID)
+    reshuffled_CLRgen<-column_to_rownames(reshuffled_CLRgen, var = "sample_ID") #make that shuffled ID column back into the row names
+    reshuffled_CLRgen
+    #permute the order of metadata
+    reshuffled_metadataH2 <- reshuffled_metadataH2[sample(nrow(reshuffled_metadataH2)),]
+    
+    # Run the models
+   my_lmersCLR_shuffle <- lapply(1:15, function(x) lmer(reshuffled_CLRgen[,x]~ reshuffled_metadataH2$Germination_cohort +(1|reshuffled_metadataH2$Shape) + (1|reshuffled_metadataH2$Line) + (1|reshuffled_metadataH2$Block), control = lmerControl(optimizer ="Nelder_Mead"))) 
+
+#VarCorr to extract random effects 
+summaries_subset_var_listCLR_shuffle<-lapply(my_lmersCLR_shuffle, function(x) as.data.frame(VarCorr(x))[,c("vcov", "sdcor")])
+summaries_subset_var_frameCLR_shuffle<- data.frame(matrix(unlist(summaries_subset_var_listCLR_shuffle), nrow=length(summaries_subset_var_listCLR_shuffle), byrow=TRUE))
+head(summaries_subset_var_frameCLR_shuffle)
+colnames(summaries_subset_var_frameCLR_shuffle)<-c("Line_variance","Block_variance","Shape_variance", "Residual_variance","Line_stdev","Block_stdev","Shape_stdev", "Residual_stdev")
+head(summaries_subset_var_frameCLR_shuffle)
+ipomoeajuiceCLR_shuffle<-summaries_subset_var_frameCLR_shuffle
+
+ipomoeajuiceCLR_shuffle<-ipomoeajuiceCLR_shuffle %>%  
+  mutate(Total_variance= Line_variance+Block_variance+Shape_variance+Residual_variance,
+         LinePercent=Line_variance/Total_variance,
+         BlockPercent=Block_variance/Total_variance,
+         ShapePercent=Shape_variance/Total_variance,
+         GeneticPercent=(Line_variance+Shape_variance)/Total_variance,
+        ResidualPercent=Residual_variance/Total_variance )
+ipomoeajuiceCLR_shuffle
+    
+    # Append simulated H2 difference to list
+
+    simulated_H2[[i]] <- print(ipomoeajuiceCLR_shuffle$GeneticPercent)
+}    
+
+# Unlist simulated means list into numeric vector
+simulated_H2 <- unlist(simulated_H2)
+head(simulated_H2)
+hist(simulated_H2)
+```
+```{r}
+exceed_count <- length(simulated_H2[simulated_H2 >= 0.11]) #0.133 needed for significant H2
+exceed_count / (nreps*15)
+```
+
+
+# Figures
+ancom figure
+```{r}
+ggsave2("ancomglory_shape_plot.png", ancomglory_shape_plot, dpi=600, width=7, height=5)
+ancomglory_shape_plot
+```
+
+composition barplot
+```{r}
+multi_leaf <- (leaf_germ1 + leaf_germ2 ) + 
+  plot_layout(nrow=1)+
+  plot_annotation(tag_levels = list(c("A", "B"))) #add figure labels
+multi_leaf #save 5 by 15
+```
+
+succession figure
+```{r}
+#possible succession figure
+a.divglory+(b.div.wuniglory_rareG/b.div.wuniglory_rare)+plot_annotation(tag_levels="A") #save 6 by 10
+```
+
+heritability figure
+```{r}
+plot_grid(communityphenotypes,genera, labels="AUTO" , rel_widths = 2:3) #save 5 by 10 inches
+```
+
+magnitude of line vs shape figure
+```{r}
+plot_grid(communityphenotypesfig,generafig, labels="AUTO" , rel_widths = 2:3) #save 5 by 10 inches
+```
+all heritability figures?
+```{r}
+communityphenotypes<-comphenPERCENTR %>% 
+  filter(!Variance_component %in% c('ResidualPercent', 'GeneticPercent')) %>% 
+  ggplot(aes(x = Model, y = Percent_variance_explained, fill=Variance_component)) +
+ geom_bar(stat ="identity",width=0.5) +
+ coord_flip() +
+ labs(x = "Community phenotype", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial Block", "Plant Line"),  values = c("#FF6699", "#3399FF", "#E69F00")) +theme_cowplot() +theme(legend.position = "none")+scale_x_discrete(labels=c("PCoA axis 3","Shannon diversity","PCoA axis 1","Observed richness", "PCoA axis 2"))+ylim(0,0.15)
+communityphenotypes
+communityphenotypesfig<-comphenPERCENTfig %>% 
+  filter(!Variance_component %in% c('ResidualPercent', 'GeneticPercent')) %>% 
+  ggplot(aes(x = Model, y = Percent_variance_explained, fill=Variance_component)) +
+ geom_bar(stat ="identity",width=0.5) +
+ coord_flip() +
+ labs(x = "Community phenotype", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial block", "Leaf shape genotype","Plant line"),  values = c("#FF6699","#E69F00", "#3399FF","#99CC00")) +theme_cowplot()  +theme(legend.position = "none")+scale_x_discrete(labels=c("PCoA axis 3","Shannon diversity","PCoA axis 1","Observed richness", "PCoA axis 2"))+ylim(0,0.15)
+communityphenotypesfig
+genera<-ipomoeaPERCENTCLR %>% 
+   filter(!Variance_component %in% c('ResidualPercent', 'Line_percent')) %>% 
+  ggplot(aes(x=reorder(Genus, -Line_percent), y=Percent_variance_explained,fill=Variance_component))+
+ geom_bar(stat ="identity",width=.75) +
+ coord_flip() +
+ labs(x = "Genus", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial block", "Plant line"),  values = c("#FF6699", "#3399FF", "#E69F00")) +theme_cowplot() +ylim(0,0.13)
+genera
+generafig<-ipomoeaPERCENTfig %>% 
+   filter(!Variance_component %in% c('ResidualPercent', 'GeneticPercent')) %>% 
+  ggplot(aes(x=reorder(Genus, -Line_percent), y=Percent_variance_explained,fill=Variance_component))+
+ geom_bar(stat ="identity",width=.75) +
+ coord_flip() +
+ labs(x = "Genus", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial block", "Leaf shape genotype","Plant line"),  values = c("#FF6699","#E69F00", "#3399FF","#99CC00")) +theme_cowplot()  +ylim(0,0.13)
+generafig
+
+plot_grid((communityphenotypes),genera,(communityphenotypesfig),generafig, labels="AUTO" , rel_widths = 2:3)
+```
+
+
+pcoa figure
+```{r}
+plot_grid(b.div.wuniglory_rareG, b.div.wuniglory_rare,b.div.wuniglory_methylo,b.div.wuniglory_sphingo,b.div.wuniglory_art, b.div.wuniglory_dein, ncol=2, labels="AUTO") #save 8 by 13 for only taxa. With other plots save 13x13
+```
+
+# Supplemental figures
+leaf morphology 
+```{r}
+plot_grid(area,circularity, labels="AUTO", rel_widths = 3:2) #save 5 by 10 inches
+```
+
+relative abundances and regressions
+```{r}
+a<-phyglory_rel_rare %>% 
+  psmelt() %>% 
+  ggplot(aes(x=Methylobacterium_relabundance, y=Sphingomonas_relabundance))+geom_point()+geom_smooth(method='lm')+ylab("Sphingomonas relative abundance" )+xlab("Methylobacterium relative abundance")+theme_cowplot()
+
+b<-ggplot(aes(x=PCoA_axis1, y=sample_data(phyglory_rel_rare)$Methylobacterium_relabundance), data=metadataphyR)+geom_point()+geom_smooth(method='lm')+xlab("Axis 1 [53.2%]")+ylab("Relative abundance")+theme_cowplot()+ggtitle("Methylobacterium")
+c<-ggplot(aes(x=PCoA_axis2, y=sample_data(phyglory_rel_rare)$Sphingomonas_relabundance), data=metadataphyR)+geom_point()+geom_smooth(method='lm')+xlab("Axis 2 [23.2%]")+ylab("Relative abundance")+theme_cowplot()+ggtitle("Sphingomonas")
+
+bc <-(b/c+plot_annotation(tag_levels = list(c("B", "C"))))
+plot_grid(a+(bc), labels="AUTO")
+```
+
