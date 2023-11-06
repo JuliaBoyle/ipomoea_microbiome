@@ -79,12 +79,11 @@ sample_variables(phyglory)
 otu_table(phyglory)[1:5, 1:5]  
 tax_table(phyglory)[1:10, 1:4]
 
-#Checking taxa prevalence at phylum level
+# Checking taxa prevalence at phylum level
 plot_taxa_prevalence(phyglory, "Phylum")
 ```
 
 # Rarefaction of data
-Does the order matter of prevalence aggregation and rarefying step? Which one is more correct?
 ```{r}
 # set seed
 set.seed(1)
@@ -107,7 +106,7 @@ ntaxa(phyglory_rarefy)
 nsamples(phyglory_rarefy)
 ```
 
-#Centered log ratio transformation 
+# Centered log ratio transformation 
 ```{r}
 #ASV feature table
 featuretableCLR<-clr(featuretable+1) #add 1 to avoid taking log of 0, use compositions package
