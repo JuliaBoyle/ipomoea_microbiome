@@ -79,7 +79,7 @@ sample_variables(phyglory)
 otu_table(phyglory)[1:5, 1:5]  
 tax_table(phyglory)[1:10, 1:4]
 
-# Checking taxa prevalence at phylum level
+#Checking taxa prevalence at phylum level
 plot_taxa_prevalence(phyglory, "Phylum")
 ```
 
@@ -216,16 +216,19 @@ a.divglory
 ```
 statistical test
 ```{r}
-gloryrichness<-estimate_richness(phyglory_rarefy)
+gloryrichness<-estimate_richness(phyglory_rarefy) #calculates asv richness and shannon diversity
+gloryrichness<-gloryrichness %>% mutate(evenness= Shannon/log(Observed)) #calculate evenness
 gloryrichness
 hist(gloryrichness$Shannon)
 hist(log(gloryrichness$Observed))
+hist(gloryrichness$evenness)
 
 #shannon
 Anova((lmer(Shannon~sample_data(phyglory_rarefy)$Shape+sample_data(phyglory_rarefy)$Germination_cohort + (1|sample_data(phyglory_rarefy)$Line) + (1|sample_data(phyglory_rarefy)$Block), data=gloryrichness)), type=3)
-
 #Observed
 Anova((lmer(log(Observed)~sample_data(phyglory_rarefy)$Shape+sample_data(phyglory_rarefy)$Germination_cohort + (1|sample_data(phyglory_rarefy)$Line) + (1|sample_data(phyglory_rarefy)$Block), data=gloryrichness)), type=3)
+#Evenness
+Anova((lmer(evenness~sample_data(phyglory_rarefy)$Shape+sample_data(phyglory_rarefy)$Germination_cohort + (1|sample_data(phyglory_rarefy)$Line) + (1|sample_data(phyglory_rarefy)$Block), data=gloryrichness)), type=3)
 ```
 
 # Beta diversity
@@ -245,10 +248,10 @@ print(b.div.wuniglory_rareG)
 Core taxa driving the variation
 ```{r}
 b.div.wuniglory_methylo <- plot_ordination(phyglory_rel_rare, phyglory.ord.wuni_rare, type= "samples", color= "Methylobacterium_relabundance") + geom_point(size=3) + ggtitle("Methylobacterium") +theme_cowplot()+xlab("Axis 1 [53.2%]")+ylab("Axis 2 [23.2%]")+scale_color_viridis(name="Relative abundance",discrete=FALSE, option="viridis")
-print(b.div.wuniglory_methylo) #maybe driving PC1
+print(b.div.wuniglory_methylo) #driving PC1
 
 b.div.wuniglory_sphingo <- plot_ordination(phyglory_rel_rare, phyglory.ord.wuni_rare, type= "samples", color= "Sphingomonas_relabundance") + geom_point(size=3) + ggtitle("Sphingomonas") +theme_cowplot()+xlab("Axis 1 [53.2%]")+ylab("Axis 2 [23.2%]")+scale_color_viridis(name="Relative abundance",discrete=FALSE, option="viridis")
-print(b.div.wuniglory_sphingo) #maybe driving PC2
+print(b.div.wuniglory_sphingo) #driving PC2
 
 b.div.wuniglory_dein <- plot_ordination(phyglory_rel_rare, phyglory.ord.wuni_rare, type= "samples", color= "Deinococcus_relabundance") + geom_point(size=3) + ggtitle("Deinococcus") +theme_cowplot()+scale_color_viridis(name="Relative abundance",discrete=FALSE, option="viridis")+xlab("Axis 1 [53.2%]")+ylab("Axis 2 [23.2%]")
 print(b.div.wuniglory_dein) #the couple dots out of place in methylobacterium plot
@@ -261,14 +264,10 @@ print(b.div.wuniglory_art) #explains upper left corner
 ```{r}
 set.seed(1)
 wunifracdist<-distance(phyglory_rel_rare, method="wunifrac", type="samples")
-braydist<-distance(phyglory_rel_rare, method="bray", type="samples")
 wunifracdist
 
 adonis2(wunifracdist ~ Shape+Germination_cohort, data = metaglory_rare, permutations=999) #sig germination cohort
-anova(betadisper(d=wunifracdist, group=metaglory_rare$Germination_cohort)) #sig germination cohort. This means the sig germ cohort wunifrac distances could be due to dispersion differences
-
-adonis2(braydist ~ Shape+Germination_cohort, data = metaglory_rare, permutations=999) #sig germination cohort
-anova(betadisper(d=braydist, group=metaglory_rare$Germination_cohort)) #nonsig germination cohort, this suggests differences in dispersion are not responsible for differences in bray-curtis composition
+anova(betadisper(d=wunifracdist, group=metaglory_rare$Germination_cohort)) #sig germination cohort. This means the sig germ cohort wunifrac distances could be due to dispersion differences. Addressed below
 ```
 
 Checking that having slightly uneven sample sizes in germ 1 and 2 does not affect the significance of our permanova and permadisp
@@ -323,8 +322,11 @@ plot(hist2, xlab=("Germination cohort p value"), main=("PERMADISP"))
 #getting species richness and ordination first 3 axes into one metadata file
 metadataphyR<-as.data.frame(sample_data(phyglory_rarefy))
 gloryrichness_rarefied<-estimate_richness(phyglory_rarefy) #generating observed and shannon 
+gloryrichness_rarefied<-gloryrichness_rarefied %>% mutate(evenness= Shannon/log(Observed)) #calculate evenness
 metadataphyR$ObservedRich<-gloryrichness_rarefied$Observed
 metadataphyR$Shannon<-gloryrichness_rarefied$Shannon
+metadataphyR$evenness<-gloryrichness_rarefied$evenness
+
 
 phyglory_rare_rel <- microbiome::transform(phyglory_rarefy, "compositional")
 phyglory.ord.wuniR <- ordinate(phyglory_rare_rel, "PCoA", "unifrac", weighted=T) #this is how the pcoa was generated, the same one as in the main text
@@ -339,6 +341,7 @@ metadataRH2<-as.data.frame(as(metadataphyR, "matrix")) #save phyloseq object as 
 str(metadataRH2)
 metadataRH2$ObservedRich<-as.integer(metadataRH2$ObservedRich) #fix some of the salient categorization problems
 metadataRH2$Shannon<-as.numeric(metadataRH2$Shannon)
+metadataRH2$evenness<-as.numeric(metadataRH2$evenness)
 metadataRH2$PCoA_axis1<-as.numeric(metadataRH2$PCoA_axis1)
 metadataRH2$PCoA_axis2<-as.numeric(metadataRH2$PCoA_axis2)
 metadataRH2$PCoA_axis3<-as.numeric(metadataRH2$PCoA_axis3)
@@ -360,21 +363,24 @@ Running the models
 set.seed(0)
 RH2_ObservedRich<-lmer(log(ObservedRich)~ Germination_cohort + Shape + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
 RH2_Shannon<-lmer(Shannon~ Germination_cohort + Shape + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
+RH2_evenness<-lmer(evenness~ Germination_cohort + Shape + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
 RH2_PCoA1<-lmer(PCoA_axis1~ Germination_cohort + Shape + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
 RH2_PCoA2<-lmer(PCoA_axis2~ Germination_cohort + Shape + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
 RH2_PCoA3<-lmer(PCoA_axis3~ Germination_cohort + Shape + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
 
 summary(RH2_ObservedRich) #sig germ
 summary(RH2_Shannon)
+summary(RH2_evenness)
 summary(RH2_PCoA1) #sig germ
 summary(RH2_PCoA2)#sig germ
 summary(RH2_PCoA3) #sig M difference from H
 
-Anova(lmer(log(ObservedRich)~ Germination_cohort + Shape + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead")), type=3)
-Anova(lmer(Shannon~ Germination_cohort + Shape + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead")), type=3)
-Anova(lmer(PCoA_axis1~ Germination_cohort + Shape + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead")), type=3)
-Anova(lmer(PCoA_axis2~ Germination_cohort + Shape + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead")), type=3)
-Anova(lmer(PCoA_axis3~ Germination_cohort + Shape + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead")), type=3)
+Anova(RH2_ObservedRich, type=3)
+Anova(RH2_evenness, type=3)
+Anova(RH2_Shannon, type=3)
+Anova(RH2_PCoA1, type=3)
+Anova(RH2_PCoA2, type=3)
+Anova(RH2_PCoA3, type=3)
 ```
 loglik with models not containing Line (higher(and less negative values) are better)
 ```{r}
@@ -383,6 +389,8 @@ logLik(RH2_ObservedRich)#-116.773
 logLik(lmer(log(ObservedRich)~ Germination_cohort + Shape + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead")))# -116.7835
 logLik(RH2_Shannon)#-114.6886
 logLik(lmer(Shannon~ Germination_cohort + Shape + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead")))#-114.7927
+logLik(RH2_evenness) #269.2387
+logLik(lmer(evenness~ Germination_cohort + Shape + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))) #269.2387
 logLik(RH2_PCoA1)# 265.7301 
 logLik(lmer(PCoA_axis1~ Germination_cohort + Shape + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead")))# 265.6788
 logLik(RH2_PCoA2)# 329.5705
@@ -395,11 +403,11 @@ logLik(lmer(PCoA_axis3~ Germination_cohort + Shape + (1|Block), data=metadataRH2
 ```{r}
 print(VarCorr(RH2_ObservedRich), comp=c("Variance", "Std.Dev."))#example output from VarCorr
 
-communityphenoR<-c(RH2_ObservedRich, RH2_Shannon, RH2_PCoA1, RH2_PCoA2, RH2_PCoA3)
+communityphenoR<-c(RH2_ObservedRich, RH2_evenness, RH2_Shannon, RH2_PCoA1, RH2_PCoA2, RH2_PCoA3)
 comphenlistR<-lapply(communityphenoR, function(x) as.data.frame(VarCorr(x))[,c("vcov", "sdcor")])
 comphenframeR<- data.frame(matrix(unlist(comphenlistR), nrow=length(comphenlistR), byrow=TRUE))
 colnames(comphenframeR)<-c("Line_variance","Block_variance", "Residual_variance","Line_stdev","Block_stdev", "Residual_stdev")
-rownames(comphenframeR)<-c("Observed_Richness", "Shannon", "PCoA1", "PCoA2", "PCoA3")
+rownames(comphenframeR)<-c("Observed_Richness", "Evenness", "Shannon", "PCoA1", "PCoA2", "PCoA3")
 comphenframeR<-comphenframeR %>% 
   mutate(Total_variance= Line_variance+Block_variance+Residual_variance,
          LinePercent=Line_variance/Total_variance,
@@ -407,19 +415,19 @@ comphenframeR<-comphenframeR %>%
         ResidualPercent=Residual_variance/Total_variance )
 comphenframeR
 comphenPERCENTR<-gather(comphenframeR, key="Variance_component", value="Percent_variance_explained", 8:10)
-comphenPERCENTR$Model<-c("Observed_Richness", "Shannon", "PCoA1", "PCoA2", "PCoA3", "Observed_Richness", "Shannon", "PCoA1", "PCoA2", "PCoA3", "Observed_Richness", "Shannon", "PCoA1", "PCoA2", "PCoA3") 
+comphenPERCENTR$Model<-c("Observed_Richness", "Evenness", "Shannon", "PCoA1", "PCoA2", "PCoA3", "Observed_Richness", "Evenness", "Shannon", "PCoA1", "PCoA2", "PCoA3", "Observed_Richness", "Evenness", "Shannon", "PCoA1", "PCoA2", "PCoA3") 
 head(comphenframeR)
 comphenPERCENTR
 ```
 figure
 ```{r}
-comphenPERCENTR$Model<-factor(comphenPERCENTR$Model, levels=c( "PCoA3", "Shannon","PCoA1", "Observed_Richness", "PCoA2"))
+comphenPERCENTR$Model<-factor(comphenPERCENTR$Model, levels=c( "PCoA3", "Shannon","PCoA1", "Observed_Richness", "Evenness", "PCoA2"))
 communityphenotypes<-comphenPERCENTR %>% 
   filter(!Variance_component %in% c('ResidualPercent', 'GeneticPercent')) %>% 
   ggplot(aes(x = Model, y = Percent_variance_explained, fill=Variance_component)) +
  geom_bar(stat ="identity",width=0.5) +
  coord_flip() +
- labs(x = "Community phenotype", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial Block", "Plant Line"),  values = c("#FF6699", "#3399FF", "#E69F00")) +theme_cowplot() +theme(legend.position = "none")+scale_x_discrete(labels=c("PCoA axis 3","Shannon diversity","PCoA axis 1","Observed richness", "PCoA axis 2"))
+ labs(x = "Community phenotype", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial Block", "Plant Line"),  values = c("#FF6699", "#3399FF", "#E69F00")) +theme_cowplot() +theme(legend.position = "none")+scale_x_discrete(labels=c("PCoA axis 3","Shannon diversity","PCoA axis 1","Observed richness", "Evenness","PCoA axis 2"))
 communityphenotypes
 ```
 
@@ -429,6 +437,7 @@ communityphenotypes
 set.seed(0)
 fig_ObservedRich<-lmer(log(ObservedRich)~ Germination_cohort + (1|Shape) + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
 fig_Shannon<-lmer(Shannon~ Germination_cohort + (1|Shape) + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
+fig_evenness<-lmer(evenness~ Germination_cohort + (1|Shape) + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
 fig_PCoA1<-lmer(PCoA_axis1~ Germination_cohort + (1|Shape) + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
 fig_PCoA2<-lmer(PCoA_axis2~ Germination_cohort + (1|Shape) + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
 fig_PCoA3<-lmer(PCoA_axis3~ Germination_cohort + (1|Shape) + (1|Line) + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))
@@ -439,11 +448,11 @@ summary(fig_PCoA1) #
 summary(fig_PCoA2)
 summary(fig_PCoA3)
 
-communityphenofig<-c(fig_ObservedRich, fig_Shannon, fig_PCoA1, fig_PCoA2, fig_PCoA3)
+communityphenofig<-c(fig_ObservedRich, fig_evenness, fig_Shannon, fig_PCoA1, fig_PCoA2, fig_PCoA3)
 comphenlistfig<-lapply(communityphenofig, function(x) as.data.frame(VarCorr(x))[,c("vcov", "sdcor")])
 comphenframefig<- data.frame(matrix(unlist(comphenlistfig), nrow=length(comphenlistfig), byrow=TRUE))
 colnames(comphenframefig)<-c("Line_variance","Block_variance","Shape_variance", "Residual_variance","Line_stdev","Block_stdev","Shape_stdev", "Residual_stdev")
-rownames(comphenframefig)<-c("Observed_Richness", "Shannon", "PCoA1", "PCoA2", "PCoA3")
+rownames(comphenframefig)<-c("Observed_Richness", "Evenness", "Shannon", "PCoA1", "PCoA2", "PCoA3")
 comphenframefig<-comphenframefig %>% 
   mutate(Total_variance= Line_variance+Block_variance+Shape_variance+Residual_variance,
          LinePercent=Line_variance/Total_variance,
@@ -453,19 +462,19 @@ comphenframefig<-comphenframefig %>%
         ResidualPercent=Residual_variance/Total_variance )
 comphenframefig
 comphenPERCENTfig<-gather(comphenframefig, key="Variance_component", value="Percent_variance_explained", 10:14)
-comphenPERCENTfig$Model<-c("Observed_Richness", "Shannon", "PCoA1", "PCoA2", "PCoA3", "Observed_Richness", "Shannon", "PCoA1", "PCoA2", "PCoA3", "Observed_Richness", "Shannon", "PCoA1", "PCoA2", "PCoA3", "Observed_Richness", "Shannon", "PCoA1", "PCoA2", "PCoA3",  "Observed_Richness", "Shannon", "PCoA1", "PCoA2", "PCoA3")
+comphenPERCENTfig$Model<-c("Observed_Richness", "Evenness", "Shannon", "PCoA1", "PCoA2", "PCoA3", "Observed_Richness", "Evenness", "Shannon", "PCoA1", "PCoA2", "PCoA3", "Observed_Richness", "Evenness", "Shannon", "PCoA1", "PCoA2", "PCoA3", "Observed_Richness", "Evenness", "Shannon", "PCoA1", "PCoA2", "PCoA3",  "Observed_Richness", "Evenness", "Shannon", "PCoA1", "PCoA2", "PCoA3")
 head(comphenframefig)
 ```
 magnitude figure
 ```{r}
-comphenPERCENTfig$Model<-factor(comphenPERCENTfig$Model, levels=c( "PCoA3", "Shannon","PCoA1", "Observed_Richness", "PCoA2"))
+comphenPERCENTfig$Model<-factor(comphenPERCENTfig$Model, levels=c( "PCoA3", "Shannon","PCoA1", "Observed_Richness", "Evenness", "PCoA2"))
 comphenPERCENTfig$Variance_component <- factor(comphenPERCENTfig$Variance_component, levels = c("BlockPercent","ShapePercent", "LinePercent", "ResidualPercent", "GeneticPercent"))
 communityphenotypesfig<-comphenPERCENTfig %>% 
   filter(!Variance_component %in% c('ResidualPercent', 'GeneticPercent')) %>% 
   ggplot(aes(x = Model, y = Percent_variance_explained, fill=Variance_component)) +
  geom_bar(stat ="identity",width=0.5) +
  coord_flip() +
- labs(x = "Community phenotype", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial block", "Leaf shape genotype","Plant line"),  values = c("#FF6699","#E69F00", "#3399FF","#99CC00")) +theme_cowplot()  +theme(legend.position = "none")+scale_x_discrete(labels=c("PCoA axis 3","Shannon diversity","PCoA axis 1","Observed richness", "PCoA axis 2"))
+ labs(x = "Community phenotype", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial block", "Leaf shape genotype","Plant line"),  values = c("#FF6699","#E69F00", "#3399FF","#99CC00")) +theme_cowplot()  +theme(legend.position = "none")+scale_x_discrete(labels=c("PCoA axis 3","Shannon diversity","PCoA axis 1","Observed richness", "Evenness", "PCoA axis 2"))
 communityphenotypesfig
 ```
 
@@ -559,7 +568,7 @@ LogLikelihood_comparison$Model_number<-model_number[1:15]
 LogLikelihood_comparison$Genus<-genus[1:15]
 
 LogLikelihood_comparison<-LogLikelihood_comparison %>% mutate(Difference_noline_or_fullrandom= With_random_effects_logLik-Noline_logLik)#if 'noline' is more more negative/worse, then the value will be positive, positive value means line improved fit
-View(LogLikelihood_comparison)
+#View(LogLikelihood_comparison)
 LogLikelihood_comparison %>% 
   ggplot(aes(x=Genus, y=Difference_noline_or_fullrandom, color=ifelse(Difference_noline_or_fullrandom >0, "Improves model fit", "Same or worse model fit")))+
   geom_point()+  scale_color_manual(name="Effect of including line", values= c("red", "black"))+ xlab('Genus') +ylab('Log likelihood difference') +theme_bw()+theme(axis.text.x = element_text(size=10, angle = 45, hjust = 1))
@@ -629,7 +638,7 @@ ipomoeaPERCENTfig$Variance_component
 
 generafig<-ipomoeaPERCENTfig %>% 
    filter(!Variance_component %in% c('ResidualPercent', 'GeneticPercent')) %>% 
-  ggplot(aes(x=reorder(Genus, -Line_percent), y=Percent_variance_explained,fill=Variance_component))+
+  ggplot(aes(x=reorder(Genus, -ipomoeaPERCENTCLR$Line_percent), y=Percent_variance_explained,fill=Variance_component))+
  geom_bar(stat ="identity",width=.75) +
  coord_flip() +
  labs(x = "Genus", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial block", "Leaf shape genotype","Plant line"),  values = c("#FF6699","#E69F00", "#3399FF","#99CC00")) +theme_cowplot() 
@@ -673,14 +682,14 @@ communityphenotypes<-comphenPERCENTR %>%
   ggplot(aes(x = Model, y = Percent_variance_explained, fill=Variance_component)) +
  geom_bar(stat ="identity",width=0.5) +
  coord_flip() +
- labs(x = "Community phenotype", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial Block", "Plant Line"),  values = c("#FF6699", "#3399FF", "#E69F00")) +theme_cowplot() +theme(legend.position = "none")+scale_x_discrete(labels=c("PCoA axis 3","Shannon diversity","PCoA axis 1","Observed richness", "PCoA axis 2"))+ylim(0,0.15)
+ labs(x = "Community phenotype", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial Block", "Plant Line"),  values = c("#FF6699", "#3399FF", "#E69F00")) +theme_cowplot() +theme(legend.position = "none")+scale_x_discrete(labels=c("PCoA axis 3","Shannon diversity","PCoA axis 1","Observed richness", "Evenness", "PCoA axis 2"))+ylim(0,0.15)
 communityphenotypes
 communityphenotypesfig<-comphenPERCENTfig %>% 
   filter(!Variance_component %in% c('ResidualPercent', 'GeneticPercent')) %>% 
   ggplot(aes(x = Model, y = Percent_variance_explained, fill=Variance_component)) +
  geom_bar(stat ="identity",width=0.5) +
  coord_flip() +
- labs(x = "Community phenotype", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial block", "Leaf shape genotype","Plant line"),  values = c("#FF6699","#E69F00", "#3399FF","#99CC00")) +theme_cowplot()  +theme(legend.position = "none")+scale_x_discrete(labels=c("PCoA axis 3","Shannon diversity","PCoA axis 1","Observed richness", "PCoA axis 2"))+ylim(0,0.15)
+ labs(x = "Community phenotype", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial block", "Leaf shape genotype","Plant line"),  values = c("#FF6699","#E69F00", "#3399FF","#99CC00")) +theme_cowplot()  +theme(legend.position = "none")+scale_x_discrete(labels=c("PCoA axis 3","Shannon diversity","PCoA axis 1","Observed richness", "Evenness", "PCoA axis 2"))+ylim(0,0.15)
 communityphenotypesfig
 genera<-ipomoeaPERCENTCLR %>% 
    filter(!Variance_component %in% c('ResidualPercent', 'Line_percent')) %>% 
@@ -691,13 +700,13 @@ genera<-ipomoeaPERCENTCLR %>%
 genera
 generafig<-ipomoeaPERCENTfig %>% 
    filter(!Variance_component %in% c('ResidualPercent', 'GeneticPercent')) %>% 
-  ggplot(aes(x=reorder(Genus, -Line_percent), y=Percent_variance_explained,fill=Variance_component))+
+  ggplot(aes(x=reorder(Genus, -ipomoeaPERCENTCLR$Line_percent), y=Percent_variance_explained,fill=Variance_component))+
  geom_bar(stat ="identity",width=.75) +
  coord_flip() +
  labs(x = "Genus", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial block", "Leaf shape genotype","Plant line"),  values = c("#FF6699","#E69F00", "#3399FF","#99CC00")) +theme_cowplot()  +ylim(0,0.13)
 generafig
 
-plot_grid((communityphenotypes),genera,(communityphenotypesfig),generafig, labels="AUTO" , rel_widths = 2:3)
+plot_grid((communityphenotypes),genera,(communityphenotypesfig),generafig, labels="AUTO" , rel_widths = 2:3) #saved 10 by 10
 ```
 
 pcoa figure
