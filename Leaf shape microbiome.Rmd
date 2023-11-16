@@ -150,7 +150,12 @@ ggplot(aes(x=Shape, y=Circularity, fill=Shape))+
 chisq.test(x=micrometa$Germination_cohort, y=micrometa$Shape) #No significant differences in leaf genotypes between cohorts
 chisq.test(x=micrometa$Block, y=micrometa$Shape) #no sig differences in leaf shape genotypes between blocks
 ```
-
+## Hardy-Weinburg equilibrium test
+```{r}
+observed<-c(51, 112, 55) #51 lobe, 112 heterozygotes, 55 whole genotypes
+expected<-c(54.5, 109, 54.5) #genotype frequencies if they were 1:2:1
+chisq.test(observed, expected)
+```
 
 # Composition plots
 Family level
