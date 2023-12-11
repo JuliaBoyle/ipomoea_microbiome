@@ -116,7 +116,7 @@ featuretableCLR
 #aggregated by Genus
 phyglory_gen <- microbiome::aggregate_rare(phyglory, level = "Genus", detection = 0/100, prevalence = 30/100)#must be 0% relative abundance, and appear in at least 30% of samples
 featuretableCLR_gen<-as.data.frame(otu_table(phyglory_gen))
-write.csv(featuretableCLR_gen, "phygloryCLRGenfeaturetable.csv")#transposed manually in excel, rows for Other and Unknown genera removed
+#write.csv(featuretableCLR_gen, "phygloryCLRGenfeaturetable.csv")#transposed manually in excel, rows for Other and Unknown genera removed
 featuretableCLRgen<-read.csv('phygloryCLRGenfeaturetable.csv',row.names = 1, check.names = FALSE, header = TRUE)
 featuretableCLRgen<-clr(featuretableCLRgen+1) #add 1 to avoid taking log of 0
 featuretableCLRgen<-as.data.frame(featuretableCLRgen)
@@ -208,7 +208,6 @@ sample_data(phyglory_rarefy)$Arthrobacter_relabundance<-tgenera_relabund_sorted$
 phyglory_core <- microbiome::aggregate_rare(phyglory_rarefy, level = "Genus", detection = 0/100, prevalence = 80/100)
 core_members(phyglory_core)
 ```
-
 
 # Alpha diversities
 plot
@@ -320,7 +319,6 @@ plot(hist1, xlab=("Germination cohort p value"), main=("PERMANOVA"))
 plot(hist2, xlab=("Germination cohort p value"), main=("PERMADISP"))
 ```
 
-
 # Estimating heritability
 ## Community wide metrics
 ```{r}
@@ -331,7 +329,6 @@ gloryrichness_rarefied<-gloryrichness_rarefied %>% mutate(evenness= Shannon/log(
 metadataphyR$ObservedRich<-gloryrichness_rarefied$Observed
 metadataphyR$Shannon<-gloryrichness_rarefied$Shannon
 metadataphyR$evenness<-gloryrichness_rarefied$evenness
-
 
 phyglory_rare_rel <- microbiome::transform(phyglory_rarefy, "compositional")
 phyglory.ord.wuniR <- ordinate(phyglory_rare_rel, "PCoA", "unifrac", weighted=T) #this is how the pcoa was generated, the same one as in the main text
@@ -403,6 +400,13 @@ logLik(lmer(PCoA_axis2~ Germination_cohort + Shape + (1|Block), data=metadataRH2
 logLik(RH2_PCoA3) #422.3402
 logLik(lmer(PCoA_axis3~ Germination_cohort + Shape + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))) #422.208
 #including line gives a better likelihood score except for Pcoa axis 2, which has same likelihood
+
+
+With_random_effects_logLik<-c(logLik(RH2_ObservedRich),logLik(RH2_Shannon),logLik(RH2_evenness),logLik(RH2_PCoA1),logLik(RH2_PCoA2), logLik(RH2_PCoA3))
+Noline_logLik<-c(logLik(lmer(log(ObservedRich)~ Germination_cohort + Shape + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))),logLik(lmer(Shannon~ Germination_cohort + Shape + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))),logLik(lmer(evenness~ Germination_cohort + Shape + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))),logLik(lmer(PCoA_axis1~ Germination_cohort + Shape + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))),logLik(lmer(PCoA_axis2~ Germination_cohort + Shape + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))),logLik(lmer(PCoA_axis3~ Germination_cohort + Shape + (1|Block), data=metadataRH2, control = lmerControl(optimizer ="Nelder_Mead"))))
+model_name<-c("Observed_richness","Shannon", "Evenness","PCoA1", "PCoA2", "PCoA3")
+LogLikelihood_comparison_com<-data.frame(With_random_effects_logLik,Noline_logLik,model_name)
+LogLikelihood_comparison_com<-LogLikelihood_comparison_com %>% mutate(Difference_noline_or_fullrandom= With_random_effects_logLik-Noline_logLik)
 ```
 ### Extract variance components and calculate heritability
 ```{r}
@@ -486,7 +490,7 @@ communityphenotypesfig
 ## Genera CLR transformed
 ```{r}
 metadataH2<-as.data.frame(sample_data(phyglory))
-write.csv(metadataH2, "metadataH2.csv")
+#write.csv(metadataH2, "metadataH2.csv")
 metadataH2<-read.csv('metadataH2.csv',row.names = 1, header = TRUE)#to get it as a dataframe, not neccessary for the model though, it can be left in phyloseq-ish format
 metadataH2$Germination_cohort<-as.factor(metadataH2$Germination_cohort)
 metadataH2$Shape<-as.factor(metadataH2$Shape)
@@ -570,14 +574,14 @@ colnames(my_lmers_likelihood_noline_frame) <- c("Noline_logLik")
 
 LogLikelihood_comparison<-cbind(my_lmers_likelihood_frame, my_lmers_likelihood_noline_frame)
 LogLikelihood_comparison$Model_number<-model_number[1:15]
-LogLikelihood_comparison$Genus<-genus[1:15]
+LogLikelihood_comparison$model_name<-genus[1:15]
 
 LogLikelihood_comparison<-LogLikelihood_comparison %>% mutate(Difference_noline_or_fullrandom= With_random_effects_logLik-Noline_logLik)#if 'noline' is more more negative/worse, then the value will be positive, positive value means line improved fit
 #View(LogLikelihood_comparison)
-LogLikelihood_comparison %>% 
-  ggplot(aes(x=Genus, y=Difference_noline_or_fullrandom, color=ifelse(Difference_noline_or_fullrandom >0, "Improves model fit", "Same or worse model fit")))+
-  geom_point()+  scale_color_manual(name="Effect of including line", values= c("red", "black"))+ xlab('Genus') +ylab('Log likelihood difference') +theme_bw()+theme(axis.text.x = element_text(size=10, angle = 45, hjust = 1))
-#in almost all cases, including line makes little difference, but it does affect some ASVs more than others, especially the most common of the most common. Model number 1 indicates the most common ASV in the dataset. 
+
+LogLikelihood_comparison_all<-rbind(LogLikelihood_comparison,LogLikelihood_comparison_com)
+LogLikelihood_comparison_all$Model_number<-model_number[1:21]
+ 
 LogLikelihood_comparison %>% 
   filter(Difference_noline_or_fullrandom>0)#positive value means line improved fit
 LogLikelihood_comparison %>% 
@@ -727,15 +731,22 @@ plot_grid(area,circularity, labels="AUTO", rel_widths = 3:2) #save 5 by 10 inche
 
 relative abundances and regressions
 ```{r}
-a<-phyglory_rel_rare %>% 
-  psmelt() %>% 
-  ggplot(aes(x=Methylobacterium_relabundance, y=Sphingomonas_relabundance))+geom_point()+geom_smooth(method='lm')+ylab("Sphingomonas relative abundance" )+xlab("Methylobacterium relative abundance")+theme_cowplot()
-
+a<-ggplot(aes(x=sample_data(phyglory_rel_rare)$Methylobacterium_relabundance, y=sample_data(phyglory_rel_rare)$Sphingomonas_relabundance), data=metadataphyR)+geom_point()+geom_smooth(method='lm')+ylab("Sphingomonas relative abundance" )+xlab("Methylobacterium relative abundance")+theme_cowplot()
 b<-ggplot(aes(x=PCoA_axis1, y=sample_data(phyglory_rel_rare)$Methylobacterium_relabundance), data=metadataphyR)+geom_point()+geom_smooth(method='lm')+xlab("Axis 1 [53.2%]")+ylab("Relative abundance")+theme_cowplot()+ggtitle("Methylobacterium")
 c<-ggplot(aes(x=PCoA_axis2, y=sample_data(phyglory_rel_rare)$Sphingomonas_relabundance), data=metadataphyR)+geom_point()+geom_smooth(method='lm')+xlab("Axis 2 [23.2%]")+ylab("Relative abundance")+theme_cowplot()+ggtitle("Sphingomonas")
 
-bc <-(b/c+plot_annotation(tag_levels = list(c("B", "C"))))
-plot_grid(a+(bc))
-a+bc #saved 5x8
+a+(b/c) +plot_annotation(tag_levels = list(c("A","B", "C")))
+```
+Permutations of p values
+```{r}
+plot(hist1, xlab=("Germination cohort p value"), main=("PERMANOVA"))
+plot(hist2, xlab=("Germination cohort p value"), main=("PERMADISP"))
+```
+
+Log likelihoods
+```{r}
+LogLikelihood_comparison_all %>% 
+  ggplot(aes(x=reorder(model_name, Model_number), y=Difference_noline_or_fullrandom, color=ifelse(Difference_noline_or_fullrandom >0, "Improves model fit", "Same or worse model fit")))+
+  geom_point()+  scale_color_manual(name="Effect of including line", values= c("red", "black"))+ xlab('Model') +ylab('Log likelihood difference') +theme_bw()+theme(axis.text.x = element_text(size=10, angle = 45, hjust = 1)) #saved landscape 4x6inches
 ```
 
