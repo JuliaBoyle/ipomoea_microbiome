@@ -170,13 +170,16 @@ phyglory.fam.rel <- phyglory %>%
 phyglory.fam.rel.germ1<-subset_samples(phyglory.fam.rel, Germination_cohort%in%c("First"))
 phyglory.fam.rel.germ2<-subset_samples(phyglory.fam.rel, Germination_cohort%in%c("Second"))
 
-#palettegood <- distinctColorPalette(50)
+palettegood <- distinctColorPalette(50)
 
-leaf_germ1<-plot_composition(phyglory.fam.rel.germ1, sample.sort = "Sphingomonadaceae", x.label = "Shape") + theme_cowplot()+ theme(legend.position = "none") +scale_fill_manual(values =palettegood) + theme(axis.text.x = element_blank(), axis.text.y=element_text(size=10)) + ggtitle("First germination cohort") + theme(legend.title = element_text(size = 5), axis.text = element_text(size=10) )+xlab("Samples")
+leaf_germ1<-plot_composition(phyglory.fam.rel.germ1, sample.sort = "Sphingomonadaceae", x.label = "Shape") + theme_cowplot()+ theme(legend.position = "none") +scale_fill_manual(values =palettegood) + theme(axis.text.x = element_blank(), axis.text.y=element_text(size=10)) + ggtitle("First germination cohort") + theme(legend.title = element_text(size = 5), legend.text = element_text(face="italic"), axis.text = element_text(size=10) )+xlab("Samples")
 leaf_germ1
 
-leaf_germ2<-plot_composition(phyglory.fam.rel.germ2, sample.sort = "Sphingomonadaceae", x.label = "Shape") + theme_cowplot() +scale_fill_manual(values =palettegood) + theme(axis.text.x = element_blank(), axis.text.y=element_text(size=10)) + ggtitle("Second germination cohort") + theme(legend.title = element_text(size = 15), axis.text = element_text(size=10) )+xlab("Samples")+ guides(fill=guide_legend(title="Bacterial Family"))
+leaf_germ2<-plot_composition(phyglory.fam.rel.germ2, sample.sort = "Sphingomonadaceae", x.label = "Shape") + theme_cowplot() +scale_fill_manual(values =palettegood) + theme(axis.text.x = element_blank(), axis.text.y=element_text(size=10)) + ggtitle("Second germination cohort") + theme(legend.title = element_text(size = 15),legend.text = element_text(face="italic"), axis.text = element_text(size=10) )+xlab("Samples")+ guides(fill=guide_legend(title="Bacterial Family"))
 leaf_germ2
+
+plot_composition(phyglory.fam.rel.germ1, sample.sort = "Shape", x.label = "Shape") + theme_cowplot()+ theme(legend.position = "none") +scale_fill_manual(values =palettegood) + theme(, axis.text.y=element_text(size=10)) + ggtitle("First germination cohort") + theme(legend.title = element_text(size = 5), axis.text = element_text(size=10) )+xlab("Samples")
+plot_composition(phyglory.fam.rel.germ2, sample.sort = "Shape", x.label = "Shape") + theme_cowplot()+ theme(legend.position = "none") +scale_fill_manual(values =palettegood) + theme(, axis.text.y=element_text(size=10)) + ggtitle("First germination cohort") + theme(legend.title = element_text(size = 5), axis.text = element_text(size=10) )+xlab("Samples")
 ```
 
 Get relative abundance of different families per sample for downstream purposes
@@ -251,16 +254,16 @@ print(b.div.wuniglory_rareG)
 
 Core taxa driving the variation
 ```{r}
-b.div.wuniglory_methylo <- plot_ordination(phyglory_rel_rare, phyglory.ord.wuni_rare, type= "samples", color= "Methylobacterium_relabundance") + geom_point(size=3) + ggtitle("Methylobacterium") +theme_cowplot()+xlab("Axis 1 [53.2%]")+ylab("Axis 2 [23.2%]")+scale_color_viridis(name="Relative abundance",discrete=FALSE, option="viridis")
+b.div.wuniglory_methylo <- plot_ordination(phyglory_rel_rare, phyglory.ord.wuni_rare, type= "samples", color= "Methylobacterium_relabundance") + geom_point(size=3) + ggtitle("Methylobacterium") +theme_cowplot()+xlab("Axis 1 [53.2%]")+ylab("Axis 2 [23.2%]")+scale_color_viridis(name="Relative abundance",discrete=FALSE, option="viridis")+theme(plot.title = element_text(face = "italic"))
 print(b.div.wuniglory_methylo) #driving PC1
 
-b.div.wuniglory_sphingo <- plot_ordination(phyglory_rel_rare, phyglory.ord.wuni_rare, type= "samples", color= "Sphingomonas_relabundance") + geom_point(size=3) + ggtitle("Sphingomonas") +theme_cowplot()+xlab("Axis 1 [53.2%]")+ylab("Axis 2 [23.2%]")+scale_color_viridis(name="Relative abundance",discrete=FALSE, option="viridis")
+b.div.wuniglory_sphingo <- plot_ordination(phyglory_rel_rare, phyglory.ord.wuni_rare, type= "samples", color= "Sphingomonas_relabundance") + geom_point(size=3) + ggtitle("Sphingomonas") +theme_cowplot()+xlab("Axis 1 [53.2%]")+ylab("Axis 2 [23.2%]")+scale_color_viridis(name="Relative abundance",discrete=FALSE, option="viridis")+theme(plot.title = element_text(face = "italic"))
 print(b.div.wuniglory_sphingo) #driving PC2
 
-b.div.wuniglory_dein <- plot_ordination(phyglory_rel_rare, phyglory.ord.wuni_rare, type= "samples", color= "Deinococcus_relabundance") + geom_point(size=3) + ggtitle("Deinococcus") +theme_cowplot()+scale_color_viridis(name="Relative abundance",discrete=FALSE, option="viridis")+xlab("Axis 1 [53.2%]")+ylab("Axis 2 [23.2%]")
+b.div.wuniglory_dein <- plot_ordination(phyglory_rel_rare, phyglory.ord.wuni_rare, type= "samples", color= "Deinococcus_relabundance") + geom_point(size=3) + ggtitle("Deinococcus") +theme_cowplot()+scale_color_viridis(name="Relative abundance",discrete=FALSE, option="viridis")+xlab("Axis 1 [53.2%]")+ylab("Axis 2 [23.2%]")+theme(plot.title = element_text(face = "italic"))
 print(b.div.wuniglory_dein) #the couple dots out of place in methylobacterium plot
 
-b.div.wuniglory_art <- plot_ordination(phyglory_rel_rare, phyglory.ord.wuni_rare, type= "samples", color= "Arthrobacter_relabundance") + geom_point(size=3) + ggtitle("Arthrobacter") +theme_cowplot()+scale_color_viridis(name="Relative abundance",discrete=FALSE, option="viridis")+xlab("Axis 1 [53.2%]")+ylab("Axis 2 [23.2%]")
+b.div.wuniglory_art <- plot_ordination(phyglory_rel_rare, phyglory.ord.wuni_rare, type= "samples", color= "Arthrobacter_relabundance") + geom_point(size=3) + ggtitle("Arthrobacter") +theme_cowplot()+scale_color_viridis(name="Relative abundance",discrete=FALSE, option="viridis")+xlab("Axis 1 [53.2%]")+ylab("Axis 2 [23.2%]")+theme(plot.title = element_text(face = "italic"))
 print(b.div.wuniglory_art) #explains upper left corner
 ```
 
@@ -548,7 +551,7 @@ ipomoeajuiceCLR<-ipomoeajuiceCLR %>%
          BlockPercent=Block_variance/Total_variance,
         ResidualPercent=Residual_variance/Total_variance )
 ipomoeajuiceCLR
-ipomoeaPERCENTCLR<-gather(ipomoeajuiceCLR, key="Variance_component", value="Percent_variance_explained", 19:21)
+ipomoeaPERCENTCLR<-gather(ipomoeajuiceCLR, key="Variance_component", value="Percent_variance_explained", 20:22)
 ipomoeaPERCENTCLR<-ipomoeaPERCENTCLR %>% 
   mutate(Line_percent=(Line_variance)/Total_variance)
 
@@ -557,7 +560,7 @@ genera<-ipomoeaPERCENTCLR %>%
   ggplot(aes(x=reorder(Genus, -Line_percent), y=Percent_variance_explained,fill=Variance_component))+
  geom_bar(stat ="identity",width=.75) +
  coord_flip() +
- labs(x = "Genus", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial block", "Plant line"),  values = c("#FF6699", "#3399FF", "#E69F00")) +theme_cowplot() 
+ labs(x = "Genus", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial block", "Plant line"),  values = c("#FF6699", "#3399FF", "#E69F00")) +theme_cowplot() + theme(axis.text.y = element_text(face="italic"))
 genera
 ```
 ### log likelihood for H2 models
@@ -650,7 +653,7 @@ generafig<-ipomoeaPERCENTfig %>%
   ggplot(aes(x=reorder(Genus, -ipomoeaPERCENTCLR$Line_percent), y=Percent_variance_explained,fill=Variance_component))+
  geom_bar(stat ="identity",width=.75) +
  coord_flip() +
- labs(x = "Genus", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial block", "Leaf shape genotype","Plant line"),  values = c("#FF6699","#E69F00", "#3399FF","#99CC00")) +theme_cowplot() 
+ labs(x = "Genus", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial block", "Leaf shape genotype","Plant line"),  values = c("#FF6699","#E69F00", "#3399FF","#99CC00")) +theme_cowplot() + theme(axis.text.y = element_text(face="italic")) 
 generafig
 ```
 
@@ -705,14 +708,14 @@ genera<-ipomoeaPERCENTCLR %>%
   ggplot(aes(x=reorder(Genus, -Line_percent), y=Percent_variance_explained,fill=Variance_component))+
  geom_bar(stat ="identity",width=.75) +
  coord_flip() +
- labs(x = "Genus", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial block", "Plant line"),  values = c("#FF6699", "#3399FF", "#E69F00")) +theme_cowplot() +ylim(0,0.13)
+ labs(x = "Genus", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial block", "Plant line"),  values = c("#FF6699", "#3399FF", "#E69F00")) +theme_cowplot() +ylim(0,0.13) + theme(axis.text.y = element_text(face="italic"))
 genera
 generafig<-ipomoeaPERCENTfig %>% 
    filter(!Variance_component %in% c('ResidualPercent', 'GeneticPercent')) %>% 
   ggplot(aes(x=reorder(Genus, -ipomoeaPERCENTCLR$Line_percent), y=Percent_variance_explained,fill=Variance_component))+
  geom_bar(stat ="identity",width=.75) +
  coord_flip() +
- labs(x = "Genus", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial block", "Leaf shape genotype","Plant line"),  values = c("#FF6699","#E69F00", "#3399FF","#99CC00")) +theme_cowplot()  +ylim(0,0.13)
+ labs(x = "Genus", y = "Percent variance explained")+scale_fill_manual(name="Variance component", labels=c("Spatial block", "Leaf shape genotype","Plant line"),  values = c("#FF6699","#E69F00", "#3399FF","#99CC00")) +theme_cowplot()  +ylim(0,0.13) + theme(axis.text.y = element_text(face="italic"))
 generafig
 
 plot_grid((communityphenotypes),genera,(communityphenotypesfig),generafig, labels="AUTO" , rel_widths = 2:3) #saved 10 by 10
@@ -731,11 +734,11 @@ plot_grid(area,circularity, labels="AUTO", rel_widths = 3:2) #save 5 by 10 inche
 
 relative abundances and regressions
 ```{r}
-a<-ggplot(aes(x=sample_data(phyglory_rel_rare)$Methylobacterium_relabundance, y=sample_data(phyglory_rel_rare)$Sphingomonas_relabundance), data=metadataphyR)+geom_point()+geom_smooth(method='lm')+ylab("Sphingomonas relative abundance" )+xlab("Methylobacterium relative abundance")+theme_cowplot()
-b<-ggplot(aes(x=PCoA_axis1, y=sample_data(phyglory_rel_rare)$Methylobacterium_relabundance), data=metadataphyR)+geom_point()+geom_smooth(method='lm')+xlab("Axis 1 [53.2%]")+ylab("Relative abundance")+theme_cowplot()+ggtitle("Methylobacterium")
-c<-ggplot(aes(x=PCoA_axis2, y=sample_data(phyglory_rel_rare)$Sphingomonas_relabundance), data=metadataphyR)+geom_point()+geom_smooth(method='lm')+xlab("Axis 2 [23.2%]")+ylab("Relative abundance")+theme_cowplot()+ggtitle("Sphingomonas")
+a<-ggplot(aes(x=sample_data(phyglory_rel_rare)$Methylobacterium_relabundance, y=sample_data(phyglory_rel_rare)$Sphingomonas_relabundance), data=metadataphyR)+geom_point()+geom_smooth(method='lm')+mdthemes::md_theme_classic() +labs(x="*Methylobacterium* relative abundance", y="*Sphingomonas* relative abundance")
+b<-ggplot(aes(x=PCoA_axis1, y=sample_data(phyglory_rel_rare)$Methylobacterium_relabundance), data=metadataphyR)+geom_point()+geom_smooth(method='lm')+mdthemes::md_theme_classic()+labs(title="*Methylobacterium*",x="Axis 1 [53.2%]",y="Relative abundance")
+c<-ggplot(aes(x=PCoA_axis2, y=sample_data(phyglory_rel_rare)$Sphingomonas_relabundance), data=metadataphyR)+geom_point()+geom_smooth(method='lm')+mdthemes::md_theme_classic()+labs(title="*Sphingomonas*",x="Axis 2 [23.2%]",y="Relative abundance")
 
-a+(b/c) +plot_annotation(tag_levels = list(c("A","B", "C")))
+a+(b/c) +plot_annotation(tag_levels = list(c("A","B", "C"))) #saved 5 by 8 landscape
 ```
 Permutations of p values
 ```{r}
@@ -747,6 +750,6 @@ Log likelihoods
 ```{r}
 LogLikelihood_comparison_all %>% 
   ggplot(aes(x=reorder(model_name, Model_number), y=Difference_noline_or_fullrandom, color=ifelse(Difference_noline_or_fullrandom >0, "Improves model fit", "Same or worse model fit")))+
-  geom_point()+  scale_color_manual(name="Effect of including line", values= c("red", "black"))+ xlab('Model') +ylab('Log likelihood difference') +theme_bw()+theme(axis.text.x = element_text(size=10, angle = 45, hjust = 1)) #saved landscape 4x6inches
+  geom_point()+  scale_color_manual(name="Effect of including line", values= c("red", "black"))+ xlab('Model') +ylab('Log likelihood difference') +theme_bw()+theme(axis.text.x = element_text(face="italic",size=10, angle = 45, hjust = 1))  #saved landscape 4x6inches
 ```
 
