@@ -41,8 +41,6 @@ library(picante)
 library(mdthemes)
 ```
 
-
-
 # Reading in data
 ```{r}
 #Reading in metadata as it's own file
@@ -179,8 +177,8 @@ leaf_germ1
 leaf_germ2<-plot_composition(phyglory.fam.rel.germ2, sample.sort = "Sphingomonadaceae", x.label = "Shape") + theme_cowplot() +scale_fill_manual(values =palettegood) + theme(axis.text.x = element_blank(), axis.text.y=element_text(size=10)) + ggtitle("Second germination cohort") + theme(legend.title = element_text(size = 15),legend.text = element_text(face="italic"), axis.text = element_text(size=10) )+xlab("Samples")+ guides(fill=guide_legend(title="Bacterial Family"))
 leaf_germ2
 
-plot_composition(phyglory.fam.rel.germ1, sample.sort = "Shape", x.label = "Shape") + theme_cowplot()+ theme(legend.position = "none") +scale_fill_manual(values =palettegood) + theme(, axis.text.y=element_text(size=10)) + ggtitle("First germination cohort") + theme(legend.title = element_text(size = 5), axis.text = element_text(size=10) )+xlab("Samples")
-plot_composition(phyglory.fam.rel.germ2, sample.sort = "Shape", x.label = "Shape") + theme_cowplot()+ theme(legend.position = "none") +scale_fill_manual(values =palettegood) + theme(, axis.text.y=element_text(size=10)) + ggtitle("First germination cohort") + theme(legend.title = element_text(size = 5), axis.text = element_text(size=10) )+xlab("Samples")
+plot_composition(phyglory.fam.rel.germ1, sample.sort = "Shape", x.label = "Shape") + theme_cowplot()+ theme(legend.position = "none") +scale_fill_manual(values =palettegood) + theme( axis.text.y=element_text(size=10)) + ggtitle("First germination cohort") + theme(legend.title = element_text(size = 5), axis.text = element_text(size=10) )+xlab("Samples")
+plot_composition(phyglory.fam.rel.germ2, sample.sort = "Shape", x.label = "Shape") + theme_cowplot()+ theme(legend.position = "none") +scale_fill_manual(values =palettegood) + theme( axis.text.y=element_text(size=10)) + ggtitle("First germination cohort") + theme(legend.title = element_text(size = 5), axis.text = element_text(size=10) )+xlab("Samples")
 ```
 
 Get relative abundance of different families per sample for downstream purposes
@@ -210,7 +208,14 @@ sample_data(phyglory_rarefy)$Arthrobacter_relabundance<-tgenera_relabund_sorted$
 # Core microbiome
 ```{r}
 phyglory_core <- microbiome::aggregate_rare(phyglory_rarefy, level = "Genus", detection = 0/100, prevalence = 80/100)
-core_members(phyglory_core)
+core_members(phyglory_core) #determining taxa to highlight in graphs
+
+phyglory_rarefy.germ1<-subset_samples(phyglory_rarefy, Germination_cohort%in%c("First"))
+phyglory_rarefy.germ2<-subset_samples(phyglory_rarefy, Germination_cohort%in%c("Second"))
+phyglory_core.germ1<- microbiome::aggregate_rare(phyglory_rarefy.germ1, level = "Genus", detection = 0/100, prevalence = 80/100)
+phyglory_core.germ2<- microbiome::aggregate_rare(phyglory_rarefy.germ2, level = "Genus", detection = 0/100, prevalence = 80/100)
+core_members(phyglory_core.germ1) #two microbial genera present only in germ cohort 1 at such high prevalence
+core_members(phyglory_core.germ2)
 ```
 
 # Alpha diversities
@@ -251,6 +256,8 @@ print(b.div.wuniglory_rare)
 
 b.div.wuniglory_rareG <- plot_ordination(phyglory_rel_rare, phyglory.ord.wuni_rare, type= "samples", color= "Germination_cohort") + geom_point(size=3) +ggtitle("")  + scale_color_manual("Germination cohort",values=c("#FF9900", "#99CC33")) +theme_cowplot() + stat_ellipse()+xlab("Axis 1 [53.2%]")+ylab("Axis 2 [23.2%]")
 print(b.div.wuniglory_rareG)
+
+print(plot_ordination(phyglory_rel_rare, phyglory.ord.wuni_rare, type= "samples", color= "Flowered_by_collection") + geom_point(size=3) +ggtitle("")  + scale_color_manual("Flowered",values=c("#99CC33", "#FF9900")) +theme_cowplot() + stat_ellipse()+xlab("Axis 1 [53.2%]")+ylab("Axis 2 [23.2%]"))
 ```
 
 Core taxa driving the variation
@@ -273,6 +280,8 @@ print(b.div.wuniglory_art) #explains upper left corner
 set.seed(1)
 wunifracdist<-distance(phyglory_rel_rare, method="wunifrac", type="samples")
 wunifracdist
+
+metaglory_rare<-as.data.frame(as.matrix(sample_data(phyglory_rel_rare)))
 
 adonis2(wunifracdist ~ Shape+Germination_cohort, data = metaglory_rare, permutations=999) #sig germination cohort
 anova(betadisper(d=wunifracdist, group=metaglory_rare$Germination_cohort)) #sig germination cohort. This means the sig germ cohort wunifrac distances could be due to dispersion differences. Addressed below
@@ -323,6 +332,610 @@ plot(hist1, xlab=("Germination cohort p value"), main=("PERMANOVA"))
 plot(hist2, xlab=("Germination cohort p value"), main=("PERMADISP"))
 ```
 
+# Network analysis
+```{r}
+library(SpiecEasi)
+library(igraph)
+library(MCL)
+library(qgraph)
+```
+
+Aggregated at genus
+```{r}
+phyglory_rarefy
+
+glory_c1<-subset_samples(phyglory_rarefy, Germination_cohort%in%c("First"))
+glory_c2<-subset_samples(phyglory_rarefy, Germination_cohort%in%c("Second"))
+glory_L<-subset_samples(phyglory_rarefy, Shape%in%c("L"))
+glory_M<-subset_samples(phyglory_rarefy, Shape%in%c("M"))
+glory_H<-subset_samples(phyglory_rarefy, Shape%in%c("H"))
+
+
+glory_c1<-t(abundances(aggregate_taxa(glory_c1, "Genus")))
+glory_c2<-t(abundances(aggregate_taxa(glory_c2, "Genus")))
+glory_L<-t(abundances(aggregate_taxa(glory_L, "Genus")))
+glory_M<-t(abundances(aggregate_taxa(glory_M, "Genus")))
+glory_H<-t(abundances(aggregate_taxa(glory_H, "Genus")))
+
+glory_c1<-glory_c1[, colnames(glory_c1) != "Unknown"] #remove unknown columns
+glory_c2<-glory_c2[, colnames(glory_c2) != "Unknown"]
+glory_L<-glory_L[, colnames(glory_L) != "Unknown"]
+glory_M<-glory_M[, colnames(glory_M) != "Unknown"]
+glory_H<-glory_H[, colnames(glory_H) != "Unknown"]
+
+glory_c1<-glory_c1[, which(colSums(glory_c1) != 0)] #remove columns with all 0s
+glory_c2<-glory_c2[, which(colSums(glory_c2) != 0)]
+glory_L<-glory_L[, which(colSums(glory_L) != 0)]
+glory_M<-glory_M[, which(colSums(glory_M) != 0)]
+glory_H<-glory_H[, which(colSums(glory_H) != 0)]
+
+glory_c1Genusnames<-colnames(glory_c1)
+glory_c2Genusnames<-colnames(glory_c2)
+glory_LGenusnames<-colnames(glory_L)
+glory_MGenusnames<-colnames(glory_M)
+glory_HGenusnames<-colnames(glory_H)
+```
+## Lobe LL
+Calculating Sparcc Pvalues
+```{r}
+set.seed(1)
+#https://biovcnet.github.io/_pages/NetworkScience_SparCC.nb.html
+#Calculating Sparcc Pvalues
+sparcc.matrix_glory_L<-sparcc(glory_L)
+sparcc.matrix_glory_L.permuted <- sparccboot(glory_L, R = 100)
+glory_L.permuted.pvals <- pval.sparccboot(sparcc.matrix_glory_L.permuted)
+data.frame(glory_L.permuted.pvals$cors, glory_L.permuted.pvals$pvals) %>% head
+cors <- glory_L.permuted.pvals$cors
+pvals <- glory_L.permuted.pvals$pvals
+sparCCpcors_glory_L <- diag(0.5, nrow = dim(sparcc.matrix_glory_L$Cor)[1], ncol = dim(sparcc.matrix_glory_L$Cor)[1])
+sparCCpcors_glory_L[upper.tri(sparCCpcors_glory_L, diag=FALSE)] <- cors
+sparCCpcors_glory_L <- sparCCpcors_glory_L + t(sparCCpcors_glory_L)
+
+sparCCpval_glory_L <- diag(0.5, nrow = dim(sparcc.matrix_glory_L$Cor)[1], ncol = dim(sparcc.matrix_glory_L$Cor)[1])
+sparCCpval_glory_L[upper.tri(sparCCpval_glory_L, diag=FALSE)] <- pvals
+sparCCpval_glory_L<- sparCCpval_glory_L + t(sparCCpval_glory_L)
+
+rownames(sparCCpcors_glory_L) <- colnames(glory_L)
+colnames(sparCCpcors_glory_L) <- colnames(glory_L)
+rownames(sparCCpval_glory_L) <- colnames(glory_L)
+colnames(sparCCpval_glory_L) <- colnames(glory_L)
+
+sparCCpcors_glory_L[1:5, 1:5]
+sparCCpval_glory_L[1:5, 1:5]
+```
+```{r}
+# Get lower triangle of the correlation matrix
+  get_lower_tri<-function(cormat){
+    cormat[upper.tri(cormat)] <- NA
+    return(cormat)
+  }
+  # Get upper triangle of the correlation matrix
+  get_upper_tri <- function(cormat){
+    cormat[lower.tri(cormat)]<- NA
+    return(cormat)
+  }
+
+reorder_cormat <- function(cormat){
+# Use correlation between variables as distance
+dd <- as.dist((1-cormat)/2)
+hc <- hclust(dd)
+cormat <-cormat[hc$order, hc$order]
+}
+reorder_cor_and_p <- function(cormat, pmat){
+  dd <- as.dist((1-cormat)/2)
+  hc <- hclust(dd)
+  cormat <-cormat[hc$order, hc$order]
+  pmat <- pmat[hc$order, hc$order]
+  list(r = cormat, p = pmat)
+}
+reordered_all_sparcc_glory_L <- reorder_cor_and_p(sparCCpcors_glory_L, sparCCpval_glory_L)
+reordered_sparccCor_glory_L <- reordered_all_sparcc_glory_L$r
+reordered_sparccP_glory_L<- reordered_all_sparcc_glory_L$p
+
+
+sparccCor_processed_glory_L <- reordered_sparccCor_glory_L  %>% get_upper_tri() %>% reshape2::melt() %>% na.omit() %>% dplyr::rename(cor = value)
+sparccP_processed_glory_L <- reordered_sparccP_glory_L  %>% get_upper_tri() %>% reshape2::melt() %>% na.omit() %>% dplyr::rename(p = value)
+
+# join the two data frames
+SparccP_glory_L <- left_join(sparccCor_processed_glory_L, sparccP_processed_glory_L, by = c("Var1", "Var2")) %>%
+  # # remove self correlations
+  # filter(Var1 != Var2) %>% 
+  # calculate the false discovery rate to adjust for multiple p values
+  mutate(fdr = p.adjust(p, method = "fdr"))
+# Correlation matrix with p values
+sparccOkP_glory_L <- SparccP_glory_L%>% filter(fdr < 0.05) 
+sparccOkP_glory_L
+sparccOkP_glory_L %>% filter(cor>0)
+sparccOkP_glory_L %>% filter(cor<0)
+```
+Plotting only significant correlations
+```{r}
+glory_L_sig.net<-graph_from_data_frame(sparccOkP_glory_L[,1:3], directed=F, vertices=NULL)
+plot(glory_L_sig.net)
+```
+Hub detection
+```{r}
+#Hub detection 
+net_glory_L<-glory_L_sig.net
+net.cn_glory_L<-closeness(net_glory_L) #measures centrality
+net.bn_glory_L<-betweenness(net_glory_L) #measures centrality
+net.pr_glory_L<-page_rank(net_glory_L)$vector 
+net.hs_glory_L<-hub_score(net_glory_L)$vector
+#Sort the species based on hubbiness score 
+net.hs.sort_glory_L<-sort(net.hs_glory_L,decreasing=TRUE) 
+#Choose the top 5 keystone species 
+net.hs.top5_glory_L<-head(net.hs.sort_glory_L,n=5)
+print(net.hs.top5_glory_L)
+```
+Cluster detection
+```{r}
+#Get clusters 
+wt_glory_L<-walktrap.community(net_glory_L) 
+ml_glory_L<-multilevel.community(net_glory_L) 
+#Get membership of walktrap clusters 
+membership(wt_glory_L)
+wt_glory_Lmembership<-membership(wt_glory_L)
+wt_glory_Lmembership<-as.data.frame(as.matrix(wt_glory_Lmembership))
+colnames(wt_glory_Lmembership)<-'WT_cluster'
+#Compare clusters detected by different methods 
+compare(membership(wt_glory_L),membership(ml_glory_L))
+#Plot clusters as dendrogram 
+plot_dendrogram(wt_glory_L)
+```
+Modularity and articulation points
+```{r}
+#Calculate modularity 
+modularity(net_glory_L,membership(wt_glory_L))
+#Find articulation points 
+AP_glory_L<-articulation.points(net_glory_L)#(Nodes so central that their removal will break the network into more components)
+```
+Network features
+```{r}
+nodes_glory_L<-V(net_glory_L) #vectors of nodes 
+edges_glory_L<-V(net_glory_L) 
+node.names_glory_L<-V(net_glory_L)$name 
+num.nodes_glory_L<-vcount(net_glory_L) #number of nodes
+print(num.nodes_glory_L) #(number of Asvs)
+num.edges_glory_L<-ecount(net_glory_L) #number of edges (number of lines between nodes)
+print(num.edges_glory_L)
+clustering_coeff_glory_L<-transitivity(net_glory_L,type="global") #transensitivity
+print(clustering_coeff_glory_L)
+```
+Plot
+```{r}
+plot(wt_glory_L,net_glory_L)
+plot(wt_glory_L,net_glory_L, layout=layout.circle)
+plot(wt_glory_L,net_glory_L, layout=layout.reingold.tilford)
+plot(wt_glory_L,net_glory_L, vertex.label.cex = 0.4, frame.color=NA, main="Lobe LL") #save 8x8
+```
+## Het Ll
+Calculating Sparcc Pvalues
+```{r}
+set.seed(1)
+#https://biovcnet.github.io/_pages/NetworkScience_SparCC.nb.html
+#Calculating Sparcc Pvalues
+sparcc.matrix_glory_M<-sparcc(glory_M)
+sparcc.matrix_glory_M.permuted <- sparccboot(glory_M, R = 100)
+glory_M.permuted.pvals <- pval.sparccboot(sparcc.matrix_glory_M.permuted)
+data.frame(glory_M.permuted.pvals$cors, glory_M.permuted.pvals$pvals) %>% head
+cors <- glory_M.permuted.pvals$cors
+pvals <- glory_M.permuted.pvals$pvals
+sparCCpcors_glory_M <- diag(0.5, nrow = dim(sparcc.matrix_glory_M$Cor)[1], ncol = dim(sparcc.matrix_glory_M$Cor)[1])
+sparCCpcors_glory_M[upper.tri(sparCCpcors_glory_M, diag=FALSE)] <- cors
+sparCCpcors_glory_M <- sparCCpcors_glory_M + t(sparCCpcors_glory_M)
+
+sparCCpval_glory_M <- diag(0.5, nrow = dim(sparcc.matrix_glory_M$Cor)[1], ncol = dim(sparcc.matrix_glory_M$Cor)[1])
+sparCCpval_glory_M[upper.tri(sparCCpval_glory_M, diag=FALSE)] <- pvals
+sparCCpval_glory_M<- sparCCpval_glory_M + t(sparCCpval_glory_M)
+
+rownames(sparCCpcors_glory_M) <- colnames(glory_M)
+colnames(sparCCpcors_glory_M) <- colnames(glory_M)
+rownames(sparCCpval_glory_M) <- colnames(glory_M)
+colnames(sparCCpval_glory_M) <- colnames(glory_M)
+
+sparCCpcors_glory_M[1:5, 1:5]
+sparCCpval_glory_M[1:5, 1:5]
+```
+```{r}
+reordered_all_sparcc_glory_M <- reorder_cor_and_p(sparCCpcors_glory_M, sparCCpval_glory_M)
+reordered_sparccCor_glory_M <- reordered_all_sparcc_glory_M$r
+reordered_sparccP_glory_M<- reordered_all_sparcc_glory_M$p
+
+sparccCor_processed_glory_M <- reordered_sparccCor_glory_M  %>% get_upper_tri() %>% reshape2::melt() %>% na.omit() %>% dplyr::rename(cor = value)
+sparccP_processed_glory_M <- reordered_sparccP_glory_M  %>% get_upper_tri() %>% reshape2::melt() %>% na.omit() %>% dplyr::rename(p = value)
+
+# join the two data frames
+SparccP_glory_M <- left_join(sparccCor_processed_glory_M, sparccP_processed_glory_M, by = c("Var1", "Var2")) %>%
+  # # remove self correlations
+  # filter(Var1 != Var2) %>% 
+  # calculate the false discovery rate to adjust for multiple p values
+  mutate(fdr = p.adjust(p, method = "fdr"))
+# Correlation matrix with p values
+sparccOkP_glory_M <- SparccP_glory_M%>% filter(fdr < 0.05) 
+sparccOkP_glory_M
+sparccOkP_glory_M %>% filter(cor>0)
+sparccOkP_glory_M %>% filter(cor<0)
+```
+Plotting only significant correlations
+```{r}
+glory_M_sig.net<-graph_from_data_frame(sparccOkP_glory_M[,1:3], directed=F, vertices=NULL)
+plot(glory_M_sig.net)
+```
+Hub detection
+```{r}
+#Hub detection 
+net_glory_M<-glory_M_sig.net
+net.cn_glory_M<-closeness(net_glory_M) #measures centrality
+print(net.cn_glory_M)#gives a measure of centrality for each ASV
+net.bn_glory_M<-betweenness(net_glory_M) #measures centrality
+net.pr_glory_M<-page_rank(net_glory_M)$vector 
+net.hs_glory_M<-hub_score(net_glory_M)$vector
+#Sort the species based on hubbiness score 
+net.hs.sort_glory_M<-sort(net.hs_glory_M,decreasing=TRUE) 
+#Choose the top 5 keystone species 
+net.hs.top5_glory_M<-head(net.hs.sort_glory_M,n=5)
+print(net.hs.top5_glory_M)
+```
+Cluster detection
+```{r}
+#Get clusters 
+wt_glory_M<-walktrap.community(net_glory_M) 
+ml_glory_M<-multilevel.community(net_glory_M) 
+#Get membership of walktrap clusters 
+membership(wt_glory_M)
+wt_glory_Mmembership<-membership(wt_glory_M)
+wt_glory_Mmembership<-as.data.frame(as.matrix(wt_glory_Mmembership))
+colnames(wt_glory_Mmembership)<-'WT_cluster'
+#Compare clusters detected by different methods 
+compare(membership(wt_glory_M),membership(ml_glory_M))
+#Plot clusters as dendrogram 
+plot_dendrogram(wt_glory_M)
+```
+Modularity and articulation points
+```{r}
+#Calculate modularity 
+modularity(net_glory_M,membership(wt_glory_M))
+#Find articulation points 
+AP_glory_M<-articulation.points(net_glory_M)#(Nodes so central that their removal will break the network into more components)
+```
+Network features
+```{r}
+nodes_glory_M<-V(net_glory_M) #vectors of nodes 
+edges_glory_M<-V(net_glory_M) 
+node.names_glory_M<-V(net_glory_M)$name 
+num.nodes_glory_M<-vcount(net_glory_M) #number of nodes
+print(num.nodes_glory_M) #(number of Asvs)
+num.edges_glory_M<-ecount(net_glory_M) #number of edges (number of lines between nodes)
+print(num.edges_glory_M)
+clustering_coeff_glory_M<-transitivity(net_glory_M,type="global") #transensitivity
+print(clustering_coeff_glory_M)
+```
+Plot
+```{r}
+plot(wt_glory_M,net_glory_M) 
+plot(wt_glory_M,net_glory_M, vertex.label.cex = 0.4, frame.color=NA, main="Heterozygote Ll")
+```
+## Heart ll
+Calculating Sparcc Pvalues
+```{r}
+set.seed(1)
+#https://biovcnet.github.io/_pages/NetworkScience_SparCC.nb.html
+#Calculating Sparcc Pvalues
+sparcc.matrix_glory_H<-sparcc(glory_H)
+sparcc.matrix_glory_H.permuted <- sparccboot(glory_H, R = 100)
+glory_H.permuted.pvals <- pval.sparccboot(sparcc.matrix_glory_H.permuted)
+data.frame(glory_H.permuted.pvals$cors, glory_H.permuted.pvals$pvals) %>% head
+cors <- glory_H.permuted.pvals$cors
+pvals <- glory_H.permuted.pvals$pvals
+sparCCpcors_glory_H <- diag(0.5, nrow = dim(sparcc.matrix_glory_H$Cor)[1], ncol = dim(sparcc.matrix_glory_H$Cor)[1])
+sparCCpcors_glory_H[upper.tri(sparCCpcors_glory_H, diag=FALSE)] <- cors
+sparCCpcors_glory_H <- sparCCpcors_glory_H + t(sparCCpcors_glory_H)
+
+sparCCpval_glory_H <- diag(0.5, nrow = dim(sparcc.matrix_glory_H$Cor)[1], ncol = dim(sparcc.matrix_glory_H$Cor)[1])
+sparCCpval_glory_H[upper.tri(sparCCpval_glory_H, diag=FALSE)] <- pvals
+sparCCpval_glory_H<- sparCCpval_glory_H + t(sparCCpval_glory_H)
+
+rownames(sparCCpcors_glory_H) <- colnames(glory_H)
+colnames(sparCCpcors_glory_H) <- colnames(glory_H)
+rownames(sparCCpval_glory_H) <- colnames(glory_H)
+colnames(sparCCpval_glory_H) <- colnames(glory_H)
+
+sparCCpcors_glory_H[1:5, 1:5]
+sparCCpval_glory_H[1:5, 1:5]
+```
+```{r}
+reordered_all_sparcc_glory_H <- reorder_cor_and_p(sparCCpcors_glory_H, sparCCpval_glory_H)
+reordered_sparccCor_glory_H <- reordered_all_sparcc_glory_H$r
+reordered_sparccP_glory_H<- reordered_all_sparcc_glory_H$p
+
+sparccCor_processed_glory_H <- reordered_sparccCor_glory_H  %>% get_upper_tri() %>% reshape2::melt() %>% na.omit() %>% dplyr::rename(cor = value)
+sparccP_processed_glory_H <- reordered_sparccP_glory_H  %>% get_upper_tri() %>% reshape2::melt() %>% na.omit() %>% dplyr::rename(p = value)
+
+# join the two data frames
+SparccP_glory_H <- left_join(sparccCor_processed_glory_H, sparccP_processed_glory_H, by = c("Var1", "Var2")) %>%
+  # # remove self correlations
+  # filter(Var1 != Var2) %>% 
+  # calculate the false discovery rate to adjust for multiple p values
+  mutate(fdr = p.adjust(p, method = "fdr"))
+# Correlation matrix with p values
+sparccOkP_glory_H <- SparccP_glory_H%>% filter(fdr < 0.05) 
+sparccOkP_glory_H
+sparccOkP_glory_H %>% filter(cor>0)
+sparccOkP_glory_H %>% filter(cor<0)
+```
+Plotting only significant correlations
+```{r}
+glory_H_sig.net<-graph_from_data_frame(sparccOkP_glory_H[,1:3], directed=F, vertices=NULL)
+plot(glory_H_sig.net)
+```
+Hub detection
+```{r}
+#Hub detection 
+net_glory_H<-glory_H_sig.net
+net.cn_glory_H<-closeness(net_glory_H) #measures centrality
+net.bn_glory_H<-betweenness(net_glory_H) #measures centrality
+net.pr_glory_H<-page_rank(net_glory_H)$vector 
+net.hs_glory_H<-hub_score(net_glory_H)$vector
+#Sort the species based on hubbiness score 
+net.hs.sort_glory_H<-sort(net.hs_glory_H,decreasing=TRUE) 
+#Choose the top 5 keystone species 
+net.hs.top5_glory_H<-head(net.hs.sort_glory_H,n=5)
+print(net.hs.top5_glory_H)
+```
+Cluster detection
+```{r}
+#Get clusters 
+wt_glory_H<-walktrap.community(net_glory_H) 
+ml_glory_H<-multilevel.community(net_glory_H) 
+#Get membership of walktrap clusters 
+membership(wt_glory_H)
+wt_glory_Hmembership<-membership(wt_glory_H)
+wt_glory_Hmembership<-as.data.frame(as.matrix(wt_glory_Hmembership))
+colnames(wt_glory_Hmembership)<-'WT_cluster'
+#Compare clusters detected by different methods 
+compare(membership(wt_glory_H),membership(ml_glory_H))
+#Plot clusters as dendrogram 
+plot_dendrogram(wt_glory_H)
+```
+Modularity and articulation points
+```{r}
+#Calculate modularity 
+modularity(net_glory_H,membership(wt_glory_H))
+#Find articulation points 
+AP_glory_H<-articulation.points(net_glory_H)#(Nodes so central that their removal will break the network into more components)
+```
+Network features
+```{r}
+nodes_glory_H<-V(net_glory_H) #vectors of nodes 
+edges_glory_H<-V(net_glory_H) 
+node.names_glory_H<-V(net_glory_H)$name 
+num.nodes_glory_H<-vcount(net_glory_H) #number of nodes
+print(num.nodes_glory_H) #(number of Asvs)
+num.edges_glory_H<-ecount(net_glory_H) #number of edges (number of lines between nodes)
+print(num.edges_glory_H)
+clustering_coeff_glory_H<-transitivity(net_glory_H,type="global") #transensitivity
+print(clustering_coeff_glory_H)
+```
+Plot
+```{r}
+plot(wt_glory_H,net_glory_H) 
+plot(wt_glory_H,net_glory_H, vertex.label.cex = 0.4, frame.color=NA, main="Whole ll")
+```
+
+## Germ cohort 1
+Calculating Sparcc Pvalues
+```{r}
+set.seed(1)
+#https://biovcnet.github.io/_pages/NetworkScience_SparCC.nb.html
+#Calculating Sparcc Pvalues
+sparcc.matrix_glory_c1<-sparcc(glory_c1)
+sparcc.matrix_glory_c1.permuted <- sparccboot(glory_c1, R = 100)
+glory_c1.permuted.pvals <- pval.sparccboot(sparcc.matrix_glory_c1.permuted)
+data.frame(glory_c1.permuted.pvals$cors, glory_c1.permuted.pvals$pvals) %>% head
+cors <- glory_c1.permuted.pvals$cors
+pvals <- glory_c1.permuted.pvals$pvals
+sparCCpcors_glory_c1 <- diag(0.5, nrow = dim(sparcc.matrix_glory_c1$Cor)[1], ncol = dim(sparcc.matrix_glory_c1$Cor)[1])
+sparCCpcors_glory_c1[upper.tri(sparCCpcors_glory_c1, diag=FALSE)] <- cors
+sparCCpcors_glory_c1 <- sparCCpcors_glory_c1 + t(sparCCpcors_glory_c1)
+
+sparCCpval_glory_c1 <- diag(0.5, nrow = dim(sparcc.matrix_glory_c1$Cor)[1], ncol = dim(sparcc.matrix_glory_c1$Cor)[1])
+sparCCpval_glory_c1[upper.tri(sparCCpval_glory_c1, diag=FALSE)] <- pvals
+sparCCpval_glory_c1<- sparCCpval_glory_c1 + t(sparCCpval_glory_c1)
+
+rownames(sparCCpcors_glory_c1) <- colnames(glory_c1)
+colnames(sparCCpcors_glory_c1) <- colnames(glory_c1)
+rownames(sparCCpval_glory_c1) <- colnames(glory_c1)
+colnames(sparCCpval_glory_c1) <- colnames(glory_c1)
+
+sparCCpcors_glory_c1[1:5, 1:5]
+sparCCpval_glory_c1[1:5, 1:5]
+```
+```{r}
+reordered_all_sparcc_glory_c1 <- reorder_cor_and_p(sparCCpcors_glory_c1, sparCCpval_glory_c1)
+reordered_sparccCor_glory_c1 <- reordered_all_sparcc_glory_c1$r
+reordered_sparccP_glory_c1<- reordered_all_sparcc_glory_c1$p
+
+sparccCor_processed_glory_c1 <- reordered_sparccCor_glory_c1  %>% get_upper_tri() %>% reshape2::melt() %>% na.omit() %>% dplyr::rename(cor = value)
+sparccP_processed_glory_c1 <- reordered_sparccP_glory_c1  %>% get_upper_tri() %>% reshape2::melt() %>% na.omit() %>% dplyr::rename(p = value)
+
+# join the two data frames
+SparccP_glory_c1 <- left_join(sparccCor_processed_glory_c1, sparccP_processed_glory_c1, by = c("Var1", "Var2")) %>%
+  # # remove self correlations
+  # filter(Var1 != Var2) %>% 
+  # calculate the false discovery rate to adjust for multiple p values
+  mutate(fdr = p.adjust(p, method = "fdr"))
+# Correlation matrix with p values
+sparccOkP_glory_c1 <- SparccP_glory_c1%>% filter(fdr < 0.05) 
+sparccOkP_glory_c1
+sparccOkP_glory_c1 %>% filter(cor>0)
+sparccOkP_glory_c1 %>% filter(cor<0)
+```
+Plotting only significant correlations
+```{r}
+glory_c1_sig.net<-graph_from_data_frame(sparccOkP_glory_c1[,1:3], directed=F, vertices=NULL)
+plot(glory_c1_sig.net)
+```
+Hub detection
+```{r}
+#Hub detection 
+net_glory_c1<-glory_c1_sig.net
+net.cn_glory_c1<-closeness(net_glory_c1) #measures centrality
+net.bn_glory_c1<-betweenness(net_glory_c1) #measures centrality
+net.pr_glory_c1<-page_rank(net_glory_c1)$vector 
+net.hs_glory_c1<-hub_score(net_glory_c1)$vector
+#Sort the species based on hubbiness score 
+net.hs.sort_glory_c1<-sort(net.hs_glory_c1,decreasing=TRUE) 
+#Choose the top 5 keystone species 
+net.hs.top5_glory_c1<-head(net.hs.sort_glory_c1,n=5)
+print(net.hs.top5_glory_c1)
+```
+Cluster detection
+```{r}
+#Get clusters 
+wt_glory_c1<-walktrap.community(net_glory_c1) 
+ml_glory_c1<-multilevel.community(net_glory_c1) 
+#Get membership of walktrap clusters 
+membership(wt_glory_c1)
+wt_glory_c1membership<-membership(wt_glory_c1)
+wt_glory_c1membership<-as.data.frame(as.matrix(wt_glory_c1membership))
+colnames(wt_glory_c1membership)<-'WT_cluster'
+#Compare clusters detected by different methods 
+compare(membership(wt_glory_c1),membership(ml_glory_c1))
+#Plot clusters as dendrogram 
+plot_dendrogram(wt_glory_c1)
+```
+Modularity and articulation points
+```{r}
+#Calculate modularity 
+modularity(net_glory_c1,membership(wt_glory_c1))
+#Find articulation points 
+AP_glory_c1<-articulation.points(net_glory_c1)#(Nodes so central that their removal will break the network into more components)
+```
+Network features
+```{r}
+nodes_glory_c1<-V(net_glory_c1) #vectors of nodes 
+edges_glory_c1<-V(net_glory_c1) 
+node.names_glory_c1<-V(net_glory_c1)$name 
+num.nodes_glory_c1<-vcount(net_glory_c1) #number of nodes
+print(num.nodes_glory_c1) #(number of Asvs)
+num.edges_glory_c1<-ecount(net_glory_c1) #number of edges (number of lines between nodes)
+print(num.edges_glory_c1)
+clustering_coeff_glory_c1<-transitivity(net_glory_c1,type="global") #transensitivity
+print(clustering_coeff_glory_c1)
+```
+Plot
+```{r}
+plot(wt_glory_c1,net_glory_c1) 
+plot(wt_glory_c1,net_glory_c1, vertex.label.cex = 0.4, frame.color=NA, main="Older germination cohort")
+```
+
+## Germ cohort 2
+Calculating Sparcc Pvalues
+```{r}
+set.seed(1)
+#https://biovcnet.github.io/_pages/NetworkScience_SparCC.nb.html
+#Calculating Sparcc Pvalues
+sparcc.matrix_glory_c2<-sparcc(glory_c2)
+sparcc.matrix_glory_c2.permuted <- sparccboot(glory_c2, R = 100)
+glory_c2.permuted.pvals <- pval.sparccboot(sparcc.matrix_glory_c2.permuted)
+data.frame(glory_c2.permuted.pvals$cors, glory_c2.permuted.pvals$pvals) %>% head
+cors <- glory_c2.permuted.pvals$cors
+pvals <- glory_c2.permuted.pvals$pvals
+sparCCpcors_glory_c2 <- diag(0.5, nrow = dim(sparcc.matrix_glory_c2$Cor)[1], ncol = dim(sparcc.matrix_glory_c2$Cor)[1])
+sparCCpcors_glory_c2[upper.tri(sparCCpcors_glory_c2, diag=FALSE)] <- cors
+sparCCpcors_glory_c2 <- sparCCpcors_glory_c2 + t(sparCCpcors_glory_c2)
+
+sparCCpval_glory_c2 <- diag(0.5, nrow = dim(sparcc.matrix_glory_c2$Cor)[1], ncol = dim(sparcc.matrix_glory_c2$Cor)[1])
+sparCCpval_glory_c2[upper.tri(sparCCpval_glory_c2, diag=FALSE)] <- pvals
+sparCCpval_glory_c2<- sparCCpval_glory_c2 + t(sparCCpval_glory_c2)
+
+rownames(sparCCpcors_glory_c2) <- colnames(glory_c2)
+colnames(sparCCpcors_glory_c2) <- colnames(glory_c2)
+rownames(sparCCpval_glory_c2) <- colnames(glory_c2)
+colnames(sparCCpval_glory_c2) <- colnames(glory_c2)
+
+sparCCpcors_glory_c2[1:5, 1:5]
+sparCCpval_glory_c2[1:5, 1:5]
+```
+```{r}
+reordered_all_sparcc_glory_c2 <- reorder_cor_and_p(sparCCpcors_glory_c2, sparCCpval_glory_c2)
+reordered_sparccCor_glory_c2 <- reordered_all_sparcc_glory_c2$r
+reordered_sparccP_glory_c2<- reordered_all_sparcc_glory_c2$p
+
+sparccCor_processed_glory_c2 <- reordered_sparccCor_glory_c2  %>% get_upper_tri() %>% reshape2::melt() %>% na.omit() %>% dplyr::rename(cor = value)
+sparccP_processed_glory_c2 <- reordered_sparccP_glory_c2  %>% get_upper_tri() %>% reshape2::melt() %>% na.omit() %>% dplyr::rename(p = value)
+
+# join the two data frames
+SparccP_glory_c2 <- left_join(sparccCor_processed_glory_c2, sparccP_processed_glory_c2, by = c("Var1", "Var2")) %>%
+  # # remove self correlations
+  # filter(Var1 != Var2) %>% 
+  # calculate the false discovery rate to adjust for multiple p values
+  mutate(fdr = p.adjust(p, method = "fdr"))
+# Correlation matrix with p values
+sparccOkP_glory_c2 <- SparccP_glory_c2%>% filter(fdr < 0.05) 
+sparccOkP_glory_c2
+sparccOkP_glory_c2 %>% filter(cor>0)
+sparccOkP_glory_c2 %>% filter(cor<0)
+```
+Plotting only significant correlations
+```{r}
+glory_c2_sig.net<-graph_from_data_frame(sparccOkP_glory_c2[,1:3], directed=F, vertices=NULL)
+plot(glory_c2_sig.net)
+```
+Hub detection
+```{r}
+#Hub detection 
+net_glory_c2<-glory_c2_sig.net
+net.cn_glory_c2<-closeness(net_glory_c2) #measures centrality
+net.bn_glory_c2<-betweenness(net_glory_c2) #measures centrality
+net.pr_glory_c2<-page_rank(net_glory_c2)$vector 
+net.hs_glory_c2<-hub_score(net_glory_c2)$vector
+#Sort the species based on hubbiness score 
+net.hs.sort_glory_c2<-sort(net.hs_glory_c2,decreasing=TRUE) 
+#Choose the top 5 keystone species 
+net.hs.top5_glory_c2<-head(net.hs.sort_glory_c2,n=5)
+print(net.hs.top5_glory_c2)
+```
+Cluster detection
+```{r}
+#Get clusters 
+wt_glory_c2<-walktrap.community(net_glory_c2) 
+ml_glory_c2<-multilevel.community(net_glory_c2) 
+#Get membership of walktrap clusters 
+membership(wt_glory_c2)
+wt_glory_c2membership<-membership(wt_glory_c2)
+wt_glory_c2membership<-as.data.frame(as.matrix(wt_glory_c2membership))
+colnames(wt_glory_c2membership)<-'WT_cluster'
+#Compare clusters detected by different methods 
+compare(membership(wt_glory_c2),membership(ml_glory_c2))
+#Plot clusters as dendrogram 
+plot_dendrogram(wt_glory_c2)
+```
+Modularity and articulation points
+```{r}
+#Calculate modularity 
+modularity(net_glory_c2,membership(wt_glory_c2))
+#Find articulation points 
+AP_glory_c2<-articulation.points(net_glory_c2)#(Nodes so central that their removal will break the network into more components)
+```
+Network features
+```{r}
+nodes_glory_c2<-V(net_glory_c2) #vectors of nodes 
+edges_glory_c2<-V(net_glory_c2) 
+node.names_glory_c2<-V(net_glory_c2)$name 
+num.nodes_glory_c2<-vcount(net_glory_c2) #number of nodes
+print(num.nodes_glory_c2) #(number of Asvs)
+num.edges_glory_c2<-ecount(net_glory_c2) #number of edges (number of lines between nodes)
+print(num.edges_glory_c2)
+clustering_coeff_glory_c2<-transitivity(net_glory_c2,type="global") #transensitivity
+print(clustering_coeff_glory_c2)
+```
+Plot
+```{r}
+plot(wt_glory_c2,net_glory_c2) 
+plot(wt_glory_c2,net_glory_c2, vertex.label.cex = 0.4, frame.color=NA, main="Younger germination cohort")
+```
+
 # Estimating heritability
 ## Community wide metrics
 ```{r}
@@ -338,7 +951,7 @@ phyglory_rare_rel <- microbiome::transform(phyglory_rarefy, "compositional")
 phyglory.ord.wuniR <- ordinate(phyglory_rare_rel, "PCoA", "unifrac", weighted=T) #this is how the pcoa was generated, the same one as in the main text
 str(phyglory.ord.wuniR)
 phyglory.ord.wuniR$values
-phyglory.ord.wuniR$vectors #numbers from first 3 pcoa axes- CHECK THIS IS WHAT I WANT
+phyglory.ord.wuniR$vectors #numbers from first 3 pcoa axes
 metadataphyR$PCoA_axis1<-phyglory.ord.wuniR$vectors[,1]
 metadataphyR$PCoA_axis2<-phyglory.ord.wuniR$vectors[,2]
 metadataphyR$PCoA_axis3<-phyglory.ord.wuniR$vectors[,3]
